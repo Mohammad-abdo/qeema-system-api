@@ -1,0 +1,41 @@
+{
+  "name": "@pms/backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PMS backend API service (Phase 2)",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "prisma:generate": "prisma generate --schema=./prisma/schema.prisma",
+    "prisma:seed": "node prisma/seed.js",
+    "test:api": "node scripts/test-api.js",
+    "script:init-rbac": "node scripts/initialize-rbac.js",
+    "script:list-users": "node scripts/list-users.js",
+    "script:verify-db": "node scripts/verify-db-counts.js",
+    "seed": "node prisma/seed.js",
+    "script:check-permissions": "node scripts/check-permissions.js"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.10.2",
+    "@sentry/node": "^8.0.0",
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.5",
+    "date-fns": "^4.1.0",
+    "date-fns-tz": "^3.2.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "express-prometheus-middleware": "^1.2.0",
+    "express-rate-limit": "^8.2.1",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.2"
+  },
+  "devDependencies": {
+    "prisma": "^5.10.2",
+    "tsx": "^4.21.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

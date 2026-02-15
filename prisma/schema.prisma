@@ -1,0 +1,788 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                             Int                             @id @default(autoincrement())
+  username                       String                          @unique
+  email                          String                          @unique
+  passwordHash                   String                          @map("password_hash")
+  role                           String                          @default("developer")
+  isActive                       Boolean                         @default(true) @map("is_active")
+  createdAt                      DateTime                        @default(now()) @map("created_at")
+  teamId                         Int?                            @map("team_id")
+  avatarUrl                      String?                         @map("avatar_url")
+  activityLogsPerformed          ActivityLog[]                   @relation("ActivityPerformedBy")
+  activityLogsAffected           ActivityLog[]                   @relation("ActivityAffectedUser")
+  activityLogs                   ActivityLog[]                   @relation("ActivityLogs") // Legacy relation
+  uploadedFiles                  Attachment[]                    @relation("FileUploader")
+  createdRules                   AutomationRule[]
+  comments                       Comment[]
+  commentMentions                CommentMention[]                @relation("CommentMentions")
+  notifications                  Notification[]
+  projectNotificationPreferences ProjectNotificationPreference[] @relation("ProjectNotificationPreferences")
+  projectNotifications           ProjectNotification[]           @relation("ProjectNotificationRecipient")
+  projectSettingsUpdated         ProjectSetting[]                @relation("ProjectSettingsUpdater")
+  projectSettingsChanged         ProjectSettingsChangeLog[]      @relation("ProjectSettingsChanger")
+  projectsManaged                Project[]                       @relation("ProjectManager")
+  projectsMarkedUrgent           Project[]                       @relation("UrgentMarkedBy")
+  settingsChanged                SettingsChangeLog[]             @relation("SettingsChanger")
+  createdSubtasks                Subtask[]                       @relation("SubtaskCreator")
+  assignedSubtasks               Subtask[]                       @relation("SubtaskAssignee")
+  updatedSettings                SystemSetting[]                 @relation("SettingsUpdater")
+  tasksCreated                   Task[]                          @relation("TaskCreator")
+  timeLogs                       TimeLog[]
+  userSettingsUpdated            UserSetting[]                   @relation("UserSettingsUpdater")
+  userSettings                   UserSetting[]                   @relation("UserSettings")
+  userSettingsChanged            UserSettingsChangeLog[]         @relation("UserSettingsChanger")
+  userSettingsChangeLogs         UserSettingsChangeLog[]         @relation("UserSettingsChangeLogOwner")
+  team                           Team?                           @relation("TeamMembers", fields: [teamId], references: [id])
+  assignedTasks                  Task[]                          @relation("TaskAssignees")
+  teamsLed                       Team[]                          @relation("TeamLead")
+  teamMemberships                TeamMember[] // Many-to-many team memberships
+  roles                          UserRole[]                      @relation("UserRoles")
+  assignedRoles                  UserRole[]                      @relation("RoleAssigner")
+  urgentAcknowledgements         UrgentProjectAcknowledgement[]  @relation("UrgentAcknowledgements")
+
+  @@index([role]) // For filtering users by role in RBAC checks
+  @@index([isActive]) // For finding active users
+  @@index([teamId]) // For finding team members
+  @@index([createdAt]) // For sorting by creation date
+  @@map("users")
+}
+
+model Team {
+  id           Int              @id @default(autoincrement())
+  name         String
+  description  String?
+  teamLeadId   Int?             @map("team_lead_id")
+  status       String           @default("active") // "active" or "inactive"
+  createdAt    DateTime         @default(now()) @map("created_at")
+  updatedAt    DateTime         @updatedAt @map("updated_at")
+  rules        AutomationRule[]
+  subtasks     Subtask[]
+  tasks        Task[]
+  users        User[]           @relation("TeamMembers") // Legacy one-to-many
+  teamLead     User?            @relation("TeamLead", fields: [teamLeadId], references: [id])
+  members      TeamMember[] // Many-to-many members
+  projectTeams ProjectTeam[] // Many-to-many projects
+
+  @@map("teams")
+}
+
+model Project {
+  id                      Int                             @id @default(autoincrement())
+  name                    String
+  type                    String // Legacy field, kept for backward compatibility
+  projectTypeId           Int?                            @map("project_type_id")
+  projectStatusId         Int?                            @map("project_status_id")
+  description             String?
+  scope                   String?                         @map("scope_text")
+  status                  String                          @default("planned") // Legacy field, kept for backward compatibility
+  priority                String                          @default("normal") // "normal", "high", "urgent"
+  urgentReason            String?                         @map("urgent_reason")
+  urgentMarkedAt          DateTime?                       @map("urgent_marked_at")
+  urgentMarkedById        Int?                            @map("urgent_marked_by_id")
+  startDate               DateTime?                       @map("start_date")
+  endDate                 DateTime?                       @map("end_date")
+  projectManagerId        Int?                            @map("project_manager_id")
+  createdById             Int?                            @map("created_by")
+  createdAt               DateTime                        @default(now()) @map("created_at")
+  updatedAt               DateTime                        @updatedAt @map("updated_at")
+  deliverables            Deliverable[]
+  notificationPreferences ProjectNotificationPreference[]
+  notifications           ProjectNotification[]
+  phases                  ProjectPhase[]
+  settings                ProjectSetting[]
+  settingsLogs            ProjectSettingsChangeLog[]
+  projectUsers            ProjectUser[]
+  projectManager          User?                           @relation("ProjectManager", fields: [projectManagerId], references: [id])
+  urgentMarkedBy          User?                           @relation("UrgentMarkedBy", fields: [urgentMarkedById], references: [id])
+  projectType             ProjectType?                    @relation(fields: [projectTypeId], references: [id])
+  projectStatus           ProjectStatus?                  @relation(fields: [projectStatusId], references: [id])
+  scopeHistory            ScopeHistory[]
+  tasks                   Task[]
+  activityLogs            ActivityLog[]
+  projectTeams            ProjectTeam[] // Many-to-many teams
+  urgentAcknowledgments   UrgentProjectAcknowledgement[]
+
+  @@index([createdAt])  // For sorting by creation date
+  @@index([status])     // For filtering by legacy status
+  @@index([projectStatusId]) // For filtering by dynamic status
+  @@index([projectTypeId]) // For filtering by type
+  @@index([projectManagerId]) // For finding PM's projects
+  @@index([createdById]) // For finding user's created projects
+  @@index([priority]) // For filtering by priority
+  @@map("projects")
+}
+
+model Task {
+  id             Int              @id @default(autoincrement())
+  title          String
+  description    String?
+  status         String           @default("pending") // Legacy field, kept for backward compatibility
+  taskStatusId   Int?             @map("task_status_id")
+  priority       String           @default("normal")
+  dueDate        DateTime?        @map("due_date")
+  plannedDate    DateTime?        @map("planned_date")
+  estimatedHours Float            @default(0.0) @map("estimated_hours")
+  actualHours    Float            @default(0.0) @map("actual_hours")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+  projectId      Int              @map("project_id")
+  teamId         Int?             @map("team_id")
+  createdById    Int?             @map("created_by_id")
+  deliverableId  Int?             @map("deliverable_id")
+  attachments    Attachment[]
+  comments       Comment[]
+  subtasks       Subtask[]
+  dependents     TaskDependency[] @relation("DependsOn")
+  dependencies   TaskDependency[] @relation("Dependent")
+  labels         TaskLabel[]
+  deliverable    Deliverable?     @relation(fields: [deliverableId], references: [id])
+  creator        User?            @relation("TaskCreator", fields: [createdById], references: [id])
+  team           Team?            @relation(fields: [teamId], references: [id])
+  project        Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  taskStatus     TaskStatus?      @relation(fields: [taskStatusId], references: [id])
+  timeLogs       TimeLog[]
+  assignees      User[]           @relation("TaskAssignees")
+  startedAt      DateTime?        @map("started_at")
+  completedAt    DateTime?        @map("completed_at")
+
+  @@index([taskStatusId])
+  @@index([projectId])  // For finding tasks by project
+  @@index([priority])   // For filtering by priority
+  @@index([status])     // For filtering by legacy status
+  @@index([dueDate])    // For date range queries
+  @@index([createdAt])  // For sorting by creation date
+  @@index([createdById]) // For finding user's created tasks
+  @@index([teamId])     // For finding team's tasks
+  @@index([projectId, taskStatusId]) // Composite for common filters
+  @@index([projectId, priority]) // Composite for priority filtering
+  @@map("tasks")
+}
+
+model Subtask {
+  id             Int                 @id @default(autoincrement())
+  title          String
+  description    String?
+  status         String              @default("pending")
+  priority       String              @default("normal")
+  startDate      DateTime?           @map("start_date")
+  dueDate        DateTime?           @map("due_date")
+  estimatedHours Float               @default(0.0) @map("estimated_hours")
+  actualHours    Float               @default(0.0) @map("actual_hours")
+  parentTaskId   Int                 @map("parent_task_id")
+  assignedToId   Int?                @map("assigned_to_id")
+  teamId         Int?                @map("team_id")
+  createdById    Int                 @map("created_by_id")
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+  comments       Comment[]
+  dependencies   SubtaskDependency[] @relation("SubtaskDependsOn")
+  dependents     SubtaskDependency[] @relation("SubtaskDependent")
+  creator        User                @relation("SubtaskCreator", fields: [createdById], references: [id])
+  team           Team?               @relation(fields: [teamId], references: [id])
+  assignedTo     User?               @relation("SubtaskAssignee", fields: [assignedToId], references: [id])
+  parentTask     Task                @relation(fields: [parentTaskId], references: [id], onDelete: Cascade)
+  timeLogs       TimeLog[]
+
+  @@map("subtasks")
+}
+
+model SubtaskDependency {
+  subtaskId          Int      @map("subtask_id")
+  dependsOnSubtaskId Int      @map("depends_on_subtask_id")
+  dependencyType     String   @default("finish_to_start") @map("dependency_type")
+  createdById        Int      @map("created_by_id")
+  createdAt          DateTime @default(now()) @map("created_at")
+  dependsOnSubtask   Subtask  @relation("SubtaskDependsOn", fields: [dependsOnSubtaskId], references: [id], onDelete: Cascade)
+  subtask            Subtask  @relation("SubtaskDependent", fields: [subtaskId], references: [id], onDelete: Cascade)
+
+  @@id([subtaskId, dependsOnSubtaskId])
+  @@map("subtask_dependencies")
+}
+
+model Comment {
+  id        Int              @id @default(autoincrement())
+  content   String
+  createdAt DateTime         @default(now()) @map("created_at")
+  taskId    Int?             @map("task_id")
+  subtaskId Int?             @map("subtask_id")
+  userId    Int              @map("user_id")
+  author    User             @relation(fields: [userId], references: [id])
+  subtask   Subtask?         @relation(fields: [subtaskId], references: [id], onDelete: Cascade)
+  task      Task?            @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  mentions  CommentMention[]
+
+  @@map("comments")
+}
+
+model CommentMention {
+  id        Int      @id @default(autoincrement())
+  commentId Int      @map("comment_id")
+  userId    Int      @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user      User     @relation("CommentMentions", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, userId])
+  @@index([userId])
+  @@index([commentId])
+  @@map("comment_mentions")
+}
+
+model Label {
+  id          Int         @id @default(autoincrement())
+  name        String      @unique
+  color       String
+  description String?
+  createdAt   DateTime    @default(now()) @map("created_at")
+  tasks       TaskLabel[]
+
+  @@map("labels")
+}
+
+model TaskLabel {
+  taskId    Int      @map("task_id")
+  labelId   Int      @map("label_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  label     Label    @relation(fields: [labelId], references: [id], onDelete: Cascade)
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, labelId])
+  @@map("task_labels")
+}
+
+model TaskDependency {
+  taskId          Int      @map("task_id")
+  dependsOnTaskId Int      @map("depends_on_task_id")
+  dependencyType  String   @default("finish_to_start") @map("dependency_type")
+  createdById     Int      @map("created_by_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  dependsOnTask   Task     @relation("DependsOn", fields: [dependsOnTaskId], references: [id], onDelete: Cascade)
+  task            Task     @relation("Dependent", fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, dependsOnTaskId])
+  @@index([taskId]) // For finding task's dependencies
+  @@index([dependsOnTaskId]) // For finding dependent tasks
+  @@map("task_dependencies")
+}
+
+model TimeLog {
+  id          Int      @id @default(autoincrement())
+  hoursLogged Float    @map("hours_logged")
+  description String?
+  logDate     DateTime @map("log_date")
+  createdAt   DateTime @default(now()) @map("created_at")
+  userId      Int      @map("user_id")
+  taskId      Int?     @map("task_id")
+  subtaskId   Int?     @map("subtask_id")
+  subtask     Subtask? @relation(fields: [subtaskId], references: [id])
+  task        Task?    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@map("time_logs")
+}
+
+model AutomationRule {
+  id               Int      @id @default(autoincrement())
+  name             String
+  description      String?
+  triggerType      String   @map("trigger_type")
+  triggerCondition String?  @map("trigger_condition")
+  actionType       String   @map("action_type")
+  actionConfig     String?  @map("action_config")
+  isActive         Boolean  @default(true) @map("is_active")
+  createdAt        DateTime @default(now()) @map("created_at")
+  createdById      Int      @map("created_by_id")
+  teamId           Int?     @map("team_id")
+  team             Team?    @relation(fields: [teamId], references: [id])
+  creator          User     @relation(fields: [createdById], references: [id])
+
+  @@map("automation_rules")
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  title     String
+  message   String
+  type      String   @default("info")
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+  userId    Int      @map("user_id")
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([userId]) // For fetching user's notifications
+  @@index([createdAt]) // For sorting by recency
+  @@index([isRead]) // For filtering unread notifications
+  @@index([userId, isRead]) // Composite for unread count
+  @@map("notifications")
+}
+
+model ActivityLog {
+  id             Int      @id @default(autoincrement())
+  actionType     String?  @map("action_type") // e.g., "user_login", "task_created", "project_updated"
+  actionCategory String?  @map("action_category") // "auth", "project", "task", "dependency", "settings", "notification", "today_task"
+  actionSummary  String?  @map("action_summary") // Short text description
+  actionDetails  String?  @map("action_details") // JSON string for detailed information
+  performedById  Int?     @map("performed_by_user_id")
+  affectedUserId Int?     @map("affected_user_id") // User who was affected by the action
+  projectId      Int?     @map("project_id")
+  entityType     String?  @map("entity_type") // "task", "project", "setting", "user", etc.
+  entityId       Int?     @map("entity_id")
+  ipAddress      String?  @map("ip_address")
+  userAgent      String?  @map("user_agent")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  // Legacy fields (kept for backward compatibility during migration)
+  action      String? @map("action") // Old field - will be removed later
+  description String? @map("description") // Old field - will be removed later
+  userId      Int?    @map("user_id") // Old field - will be removed later
+
+  // Relationships
+  performedBy  User?    @relation("ActivityPerformedBy", fields: [performedById], references: [id])
+  affectedUser User?    @relation("ActivityAffectedUser", fields: [affectedUserId], references: [id])
+  project      Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  user         User?    @relation("ActivityLogs", fields: [userId], references: [id]) // Legacy relation
+
+  @@index([createdAt])
+  @@index([performedById])
+  @@index([projectId])
+  @@index([actionCategory])
+  @@index([entityType, entityId])
+  @@map("activity_logs")
+}
+
+model ProjectUser {
+  id                   Int       @id @default(autoincrement())
+  projectId            Int       @map("project_id")
+  userId               Int       @map("user_id")
+  role                 String
+  allocationPercentage Int       @default(100) @map("allocation_percentage")
+  joinedAt             DateTime  @map("joined_at")
+  leftAt               DateTime? @map("left_at")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  project              Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId, joinedAt])
+  @@map("project_users")
+}
+
+model ProjectPhase {
+  id            Int       @id @default(autoincrement())
+  projectId     Int       @map("project_id")
+  name          String
+  description   String?
+  sequenceOrder Int       @map("sequence_order")
+  startDate     DateTime? @map("start_date")
+  endDate       DateTime? @map("end_date")
+  status        String    @default("pending")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("project_phases")
+}
+
+model Deliverable {
+  id                 Int      @id @default(autoincrement())
+  projectId          Int      @map("project_id")
+  name               String
+  description        String?
+  acceptanceCriteria String?  @map("acceptance_criteria")
+  status             String   @default("pending")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+  project            Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks              Task[]
+
+  @@map("deliverables")
+}
+
+model ScopeHistory {
+  id           Int      @id @default(autoincrement())
+  projectId    Int      @map("project_id")
+  scopeText    String   @map("scope_text")
+  changeReason String?  @map("change_reason")
+  changedById  Int      @map("changed_by_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("scope_history")
+}
+
+model Attachment {
+  id           Int      @id @default(autoincrement())
+  fileName     String   @map("file_name")
+  fileUrl      String   @map("file_url")
+  fileType     String?  @map("file_type")
+  fileSize     Int?     @map("file_size")
+  uploadedAt   DateTime @default(now()) @map("uploaded_at")
+  taskId       Int?     @map("task_id")
+  uploadedById Int      @map("uploaded_by_id")
+  uploader     User     @relation("FileUploader", fields: [uploadedById], references: [id])
+  task         Task?    @relation(fields: [taskId], references: [id])
+
+  @@map("attachments")
+}
+
+model SystemSetting {
+  id          Int                 @id @default(autoincrement())
+  key         String              @unique
+  value       String
+  category    String
+  description String?             @map("description")
+  updatedAt   DateTime            @updatedAt @map("updated_at")
+  updatedBy   Int                 @map("updated_by")
+  changeLogs  SettingsChangeLog[]
+  updater     User                @relation("SettingsUpdater", fields: [updatedBy], references: [id])
+
+  @@map("system_settings")
+}
+
+model SettingsChangeLog {
+  id         Int           @id @default(autoincrement())
+  settingKey String        @map("setting_key")
+  oldValue   String?       @map("old_value")
+  newValue   String        @map("new_value")
+  reason     String?
+  userId     Int           @map("user_id")
+  settingId  Int           @map("setting_id")
+  createdAt  DateTime      @default(now()) @map("created_at")
+  setting    SystemSetting @relation(fields: [settingId], references: [id], onDelete: Cascade)
+  user       User          @relation("SettingsChanger", fields: [userId], references: [id])
+
+  @@map("settings_change_logs")
+}
+
+model ProjectSetting {
+  id         Int                        @id @default(autoincrement())
+  projectId  Int                        @map("project_id")
+  key        String
+  value      String
+  category   String
+  enabled    Boolean                    @default(true)
+  updatedAt  DateTime                   @updatedAt @map("updated_at")
+  updatedBy  Int                        @map("updated_by")
+  updater    User                       @relation("ProjectSettingsUpdater", fields: [updatedBy], references: [id])
+  project    Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  changeLogs ProjectSettingsChangeLog[]
+
+  @@unique([projectId, key])
+  @@index([projectId, category])
+  @@map("project_settings")
+}
+
+model ProjectSettingsChangeLog {
+  id         Int            @id @default(autoincrement())
+  projectId  Int            @map("project_id")
+  settingKey String         @map("setting_key")
+  category   String
+  oldValue   String?        @map("old_value")
+  newValue   String         @map("new_value")
+  reason     String?
+  changedBy  Int            @map("changed_by")
+  settingId  Int            @map("setting_id")
+  createdAt  DateTime       @default(now()) @map("created_at")
+  setting    ProjectSetting @relation(fields: [settingId], references: [id], onDelete: Cascade)
+  changer    User           @relation("ProjectSettingsChanger", fields: [changedBy], references: [id])
+  project    Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, settingKey])
+  @@index([createdAt])
+  @@map("project_settings_change_logs")
+}
+
+model UserSetting {
+  id         Int                     @id @default(autoincrement())
+  userId     Int                     @map("user_id")
+  key        String
+  value      String
+  category   String
+  updatedAt  DateTime                @updatedAt @map("updated_at")
+  updatedBy  Int                     @map("updated_by")
+  updater    User                    @relation("UserSettingsUpdater", fields: [updatedBy], references: [id])
+  user       User                    @relation("UserSettings", fields: [userId], references: [id], onDelete: Cascade)
+  changeLogs UserSettingsChangeLog[]
+
+  @@unique([userId, key])
+  @@index([userId, category])
+  @@map("user_settings")
+}
+
+model UserSettingsChangeLog {
+  id         Int         @id @default(autoincrement())
+  userId     Int         @map("user_id")
+  settingKey String      @map("setting_key")
+  category   String
+  oldValue   String?     @map("old_value")
+  newValue   String      @map("new_value")
+  reason     String?
+  changedBy  Int         @map("changed_by")
+  settingId  Int         @map("setting_id")
+  createdAt  DateTime    @default(now()) @map("created_at")
+  setting    UserSetting @relation(fields: [settingId], references: [id], onDelete: Cascade)
+  changer    User        @relation("UserSettingsChanger", fields: [changedBy], references: [id])
+  user       User        @relation("UserSettingsChangeLogOwner", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, settingKey])
+  @@index([createdAt])
+  @@map("user_settings_change_logs")
+}
+
+model ProjectNotification {
+  id                     Int       @id @default(autoincrement())
+  projectId              Int       @map("project_id")
+  userId                 Int       @map("user_id")
+  type                   String
+  entityType             String    @map("entity_type")
+  entityId               Int?      @map("entity_id")
+  title                  String
+  message                String
+  isRead                 Boolean   @default(false) @map("is_read")
+  soundRequired          Boolean   @default(false) @map("sound_required")
+  isUrgent               Boolean   @default(false) @map("is_urgent")
+  requiresAcknowledgment Boolean   @default(false) @map("requires_acknowledgment")
+  acknowledgedAt         DateTime? @map("acknowledged_at")
+  createdAt              DateTime  @default(now()) @map("created_at")
+  user                   User      @relation("ProjectNotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  project                Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, userId, isRead])
+  @@index([projectId, userId, isUrgent, requiresAcknowledgment])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("project_notifications")
+}
+
+model UrgentProjectAcknowledgement {
+  id             Int      @id @default(autoincrement())
+  projectId      Int      @map("project_id")
+  userId         Int      @map("user_id")
+  acknowledgedAt DateTime @default(now()) @map("acknowledged_at")
+  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user           User     @relation("UrgentAcknowledgements", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([projectId])
+  @@index([userId])
+  @@map("urgent_project_acknowledgements")
+}
+
+model ProjectNotificationPreference {
+  id                        Int      @id @default(autoincrement())
+  projectId                 Int      @map("project_id")
+  userId                    Int      @map("user_id")
+  soundEnabled              Boolean  @default(true) @map("sound_enabled")
+  taskNotifications         Boolean  @default(true) @map("task_notifications")
+  dependencyNotifications   Boolean  @default(true) @map("dependency_notifications")
+  todayTaskNotifications    Boolean  @default(true) @map("today_task_notifications")
+  projectAdminNotifications Boolean  @default(true) @map("project_admin_notifications")
+  updatedAt                 DateTime @updatedAt @map("updated_at")
+  user                      User     @relation("ProjectNotificationPreferences", fields: [userId], references: [id], onDelete: Cascade)
+  project                   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([projectId, userId])
+  @@map("project_notification_preferences")
+}
+
+model TeamMember {
+  id       Int      @id @default(autoincrement())
+  teamId   Int      @map("team_id")
+  userId   Int      @map("user_id")
+  role     String   @default("member") // "member", "lead", "admin"
+  joinedAt DateTime @default(now()) @map("joined_at")
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@index([teamId])
+  @@index([userId])
+  @@map("team_members")
+}
+
+model ProjectTeam {
+  id         Int      @id @default(autoincrement())
+  projectId  Int      @map("project_id")
+  teamId     Int      @map("team_id")
+  assignedAt DateTime @default(now()) @map("assigned_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  team    Team    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, teamId])
+  @@index([projectId])
+  @@index([teamId])
+  @@map("project_teams")
+}
+
+model Role {
+  id           Int      @id @default(autoincrement())
+  name         String   @unique
+  description  String?
+  isSystemRole Boolean  @default(false) @map("is_system_role") // Cannot be deleted if true
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  permissions RolePermission[]
+  userRoles   UserRole[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          Int      @id @default(autoincrement())
+  key         String   @unique // e.g., "project.create", "task.assign"
+  name        String
+  description String?
+  module      String // e.g., "project", "task", "settings"
+  category    String? // e.g., "management", "view", "edit"
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  rolePermissions RolePermission[]
+
+  @@index([module])
+  @@index([category])
+  @@map("permissions")
+}
+
+model RolePermission {
+  id           Int      @id @default(autoincrement())
+  roleId       Int      @map("role_id")
+  permissionId Int      @map("permission_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@index([roleId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  id         Int      @id @default(autoincrement())
+  userId     Int      @map("user_id")
+  roleId     Int      @map("role_id")
+  scopeType  String?  @map("scope_type") // "global" or "project"
+  scopeId    Int?     @map("scope_id") // Project ID if scopeType is "project"
+  assignedAt DateTime @default(now()) @map("assigned_at")
+  assignedBy Int?     @map("assigned_by") // User who assigned this role
+
+  user     User  @relation("UserRoles", fields: [userId], references: [id], onDelete: Cascade)
+  role     Role  @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  assigner User? @relation("RoleAssigner", fields: [assignedBy], references: [id])
+
+  @@unique([userId, roleId, scopeType, scopeId])
+  @@index([userId])
+  @@index([roleId])
+  @@index([scopeType, scopeId])
+  @@map("user_roles")
+}
+
+model ProjectType {
+  id           Int       @id @default(autoincrement())
+  name         String
+  description  String?
+  isActive     Boolean   @default(true) @map("is_active")
+  displayOrder Int       @default(0) @map("display_order")
+  color        String? // Optional color for UI
+  icon         String? // Optional icon name
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  projects     Project[]
+
+  @@index([isActive])
+  @@index([displayOrder])
+  @@map("project_types")
+}
+
+model ProjectStatus {
+  id         Int       @id @default(autoincrement())
+  name       String    @unique
+  color      String    @default("#6b7280") // Default gray color
+  isDefault  Boolean   @default(false) @map("is_default")
+  isFinal    Boolean   @default(false) @map("is_final") // Cannot move from final status
+  isUrgent   Boolean   @default(false) @map("is_urgent") // Triggers urgent notifications
+  orderIndex Int       @default(0) @map("order_index")
+  isActive   Boolean   @default(true) @map("is_active")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+  projects   Project[]
+
+  @@index([isActive])
+  @@index([orderIndex])
+  @@index([isDefault])
+  @@index([isUrgent])
+  @@map("project_statuses")
+}
+
+model TaskStatus {
+  id         Int       @id @default(autoincrement())
+  name       String    @unique
+  color      String    @default("#6b7280") // Default gray color
+  isDefault  Boolean   @default(false) @map("is_default")
+  isFinal    Boolean   @default(false) @map("is_final") // Cannot edit tasks in final status
+  isBlocking Boolean   @default(false) @map("is_blocking") // Blocks dependent tasks
+  orderIndex Int       @default(0) @map("order_index")
+  isActive   Boolean   @default(true) @map("is_active")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+  tasks      Task[]
+
+  @@index([isActive])
+  @@index([orderIndex])
+  @@index([isDefault])
+  @@index([isBlocking])
+  @@map("task_statuses")
+}
+
+model StatSnapshot {
+  id          Int      @id @default(autoincrement())
+  entityType  String   @map("entity_type") // "project", "task", "global"
+  entityId    Int?     @map("entity_id")   // Nullable for global stats
+  metricKey   String   @map("metric_key")  // e.g., "total_tasks", "completed_tasks"
+  value       Float
+  date        DateTime // The date this snapshot represents
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([entityType, entityId, metricKey, date])
+  @@map("stats_snapshots")
+}
+
+model ProductivitySnapshot {
+  id          Int      @id @default(autoincrement())
+  entityType  String   @map("entity_type") // "user", "team", "project"
+  entityId    Int      @map("entity_id")
+  period      String   // "daily", "weekly"
+  startDate   DateTime @map("start_date")
+  endDate     DateTime @map("end_date")
+  score       Float
+  breakdown   String   @map("breakdown") // JSON
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([entityType, entityId, period])
+  @@map("productivity_snapshots")
+}
+
+model ForecastSnapshot {
+  id            Int      @id @default(autoincrement())
+  entityType    String   @map("entity_type") // "task", "project"
+  entityId      Int      @map("entity_id")
+  predictedDate DateTime @map("predicted_date")
+  riskLevel     String   @map("risk_level") // "low", "medium", "high"
+  confidence    Float
+  explanation   String   // JSON or text
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([entityType, entityId])
+  @@map("forecast_snapshots")
+}

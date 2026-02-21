@@ -3,6 +3,7 @@
 const { hasPermissionWithoutRoleBypass, getPermissionsList, isAdmin } = require("../lib/rbac");
 const { prisma } = require("../lib/prisma");
 const { sendError, CODES } = require("../lib/errorResponse");
+const { logActivity } = require("../lib/activityLogger");
 
 async function check(req, res) {
   try {
@@ -121,6 +122,14 @@ async function createRole(req, res) {
     const role = await prisma.role.create({
       data: { name: String(name).trim(), description: description ? String(description).trim() : null },
     });
+    await logActivity({
+      actionType: "role_created",
+      actionCategory: "settings",
+      entityType: "role",
+      entityId: role.id,
+      performedById: userId,
+      actionSummary: `Role '${role.name}' created`,
+    }, req);
     return res.status(201).json(role);
   } catch (err) {
     console.error("[rbacController] createRole:", err);
@@ -146,6 +155,14 @@ async function updateRole(req, res) {
     if (name !== undefined) data.name = String(name).trim();
     if (description !== undefined) data.description = description ? String(description).trim() : null;
     const updated = await prisma.role.update({ where: { id: roleId }, data });
+    await logActivity({
+      actionType: "role_updated",
+      actionCategory: "settings",
+      entityType: "role",
+      entityId: roleId,
+      performedById: userId,
+      actionSummary: `Role '${role.name}' updated`,
+    }, req);
     return res.json(updated);
   } catch (err) {
     console.error("[rbacController] updateRole:", err);
@@ -216,6 +233,14 @@ async function deleteRole(req, res) {
     if (role.isSystemRole) {
       return sendError(res, 400, "Cannot delete system role", { code: CODES.BAD_REQUEST, requestId });
     }
+    await logActivity({
+      actionType: "role_deleted",
+      actionCategory: "settings",
+      entityType: "role",
+      entityId: roleId,
+      performedById: userId,
+      actionSummary: `Role '${role.name}' deleted`,
+    }, req);
     await prisma.role.delete({ where: { id: roleId } });
     return res.json({ success: true });
   } catch (err) {

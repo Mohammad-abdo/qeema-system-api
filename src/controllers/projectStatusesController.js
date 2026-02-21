@@ -2,6 +2,7 @@
 
 const { prisma } = require("../lib/prisma");
 const { sendError, CODES } = require("../lib/errorResponse");
+const { logActivity } = require("../lib/activityLogger");
 
 async function list(req, res) {
   try {
@@ -62,7 +63,17 @@ async function create(req, res) {
         isActive: Boolean(isActive),
       },
     });
-
+    const userId = Number(req.user?.id);
+    if (userId) {
+      await logActivity({
+        actionType: "project_status_created",
+        actionCategory: "settings",
+        entityType: "project_status",
+        entityId: projectStatus.id,
+        performedById: userId,
+        actionSummary: `Project status '${projectStatus.name}' created`,
+      }, req);
+    }
     return res.status(201).json({ success: true, projectStatus });
   } catch (err) {
     if (err.code === "P2002") return sendError(res, 409, "A project status with this name already exists", { code: "CONFLICT", requestId: req.id });
@@ -99,7 +110,17 @@ async function update(req, res) {
         ...(isActive !== undefined && { isActive: Boolean(isActive) }),
       },
     });
-
+    const userId = Number(req.user?.id);
+    if (userId) {
+      await logActivity({
+        actionType: "project_status_updated",
+        actionCategory: "settings",
+        entityType: "project_status",
+        entityId: id,
+        performedById: userId,
+        actionSummary: `Project status '${existing.name}' updated`,
+      }, req);
+    }
     return res.json({ success: true, projectStatus });
   } catch (err) {
     if (err.code === "P2002") return sendError(res, 409, "A project status with this name already exists", { code: "CONFLICT", requestId: req.id });
@@ -120,7 +141,17 @@ async function remove(req, res) {
 
     const status = await prisma.projectStatus.findUnique({ where: { id } });
     if (!status) return sendError(res, 404, "Project status not found", { code: CODES.NOT_FOUND, requestId: req.id });
-
+    const userId = Number(req.user?.id);
+    if (userId) {
+      await logActivity({
+        actionType: "project_status_deleted",
+        actionCategory: "settings",
+        entityType: "project_status",
+        entityId: id,
+        performedById: userId,
+        actionSummary: `Project status '${status.name}' deleted`,
+      }, req);
+    }
     await prisma.projectStatus.delete({ where: { id } });
     return res.json({ success: true });
   } catch (err) {

@@ -4,6 +4,7 @@ const path = require("path");
 const fs = require("fs");
 const { prisma } = require("../lib/prisma");
 const { sendError, CODES } = require("../lib/errorResponse");
+const { logActivity } = require("../lib/activityLogger");
 
 const UPLOADS_BRANDING = path.join(process.cwd(), "public", "uploads", "branding");
 const ALLOWED_IMAGE_TYPES = /^image\/(jpeg|png|gif|webp|svg\+xml)$/;
@@ -92,6 +93,13 @@ async function setByKey(req, res) {
         },
       });
     }
+    await logActivity({
+      actionType: "setting_updated",
+      actionCategory: "settings",
+      entityType: "setting",
+      performedById: userId,
+      actionSummary: `System setting '${String(key)}' ${existing ? "updated" : "created"}`,
+    }, req);
     return res.json({ success: true });
   } catch (err) {
     console.error("[systemSettingsController] setByKey:", err);
@@ -128,6 +136,13 @@ async function uploadLogo(req, res) {
     const filename = `logo${safeExt}`;
     const destPath = path.join(UPLOADS_BRANDING, filename);
     fs.writeFileSync(destPath, file.buffer);
+    await logActivity({
+      actionType: "logo_uploaded",
+      actionCategory: "settings",
+      entityType: "setting",
+      performedById: userId,
+      actionSummary: "System logo uploaded",
+    }, req);
     const baseUrl = `${req.protocol}://${req.get("host")}`;
     const url = `${baseUrl}/uploads/branding/${filename}`;
     return res.json({ url });

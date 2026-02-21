@@ -3,7 +3,9 @@
 const express = require("express");
 const { PrismaClient } = require("@prisma/client");
 const { sendSuccess, sendError, CODES } = require("../lib/errorResponse");
-const { startOfDay, endOfDay } = require("date-fns");
+const { logActivity } = require("../lib/activityLogger");
+const { notifyUsers } = require("../lib/notifyUsers");
+const { subDays } = require("date-fns");
 const { formatInTimeZone } = require("date-fns-tz");
 const fs = require("fs");
 const path = require("path");
@@ -13,6 +15,8 @@ const router = express.Router();
 const prisma = new PrismaClient();
 
 const CAIRO_TIMEZONE = "Africa/Cairo";
+/** Egypt uses UTC+2 (no DST since 2015) */
+const CAIRO_UTC_OFFSET_HOURS = 2;
 const TRACKER_FILE = path.join(process.cwd(), ".last-focus-reset");
 
 /**
@@ -20,6 +24,26 @@ const TRACKER_FILE = path.join(process.cwd(), ".last-focus-reset");
  */
 function getCairoDateString() {
     return formatInTimeZone(new Date(), CAIRO_TIMEZONE, "yyyy-MM-dd");
+}
+
+/**
+ * Get Cairo date string for N days ago in Cairo
+ */
+function getCairoDateStringDaysAgo(days) {
+    const d = subDays(new Date(), days);
+    return formatInTimeZone(d, CAIRO_TIMEZONE, "yyyy-MM-dd");
+}
+
+/**
+ * Get start and end of a Cairo calendar day in UTC (for DB queries).
+ * @param {string} dateStr - YYYY-MM-DD in Cairo
+ * @returns {{ start: Date, end: Date }}
+ */
+function getCairoDayRangeUtc(dateStr) {
+    const [y, m, d] = dateStr.split("-").map(Number);
+    const start = new Date(Date.UTC(y, m - 1, d, -CAIRO_UTC_OFFSET_HOURS, 0, 0, 0));
+    const end = new Date(Date.UTC(y, m - 1, d, 24 - CAIRO_UTC_OFFSET_HOURS - 1, 59, 59, 999));
+    return { start, end };
 }
 
 /**
@@ -48,6 +72,47 @@ function saveLastResetDate(date) {
 }
 
 /**
+ * If we've crossed midnight Cairo since last reset, clear tasks from the previous Cairo day
+ * and persist the new reset date. No cron; runs on first focus request of the new day.
+ */
+async function checkAndRunMidnightCairoReset(req) {
+    const todayCairo = getCairoDateString();
+    const lastReset = getLastResetDate();
+    const needsReset = !lastReset || lastReset !== todayCairo;
+    if (!needsReset) return;
+
+    const dayToClear = lastReset || getCairoDateStringDaysAgo(1);
+    const { start: clearStart, end: clearEnd } = getCairoDayRangeUtc(dayToClear);
+
+    const tasksToClear = await prisma.task.findMany({
+        where: { plannedDate: { gte: clearStart, lte: clearEnd } },
+        select: { id: true },
+    });
+    if (tasksToClear.length > 0) {
+        await prisma.task.updateMany({
+            where: { id: { in: tasksToClear.map((t) => t.id) } },
+            data: { plannedDate: null },
+        });
+        await logActivity({
+            actionType: "system_reset_focus",
+            actionCategory: "today_task",
+            entityType: "system",
+            entityId: 0,
+            performedById: req.user?.id ?? null,
+            actionSummary: `Midnight Cairo auto-reset cleared ${tasksToClear.length} tasks from focus`,
+            actionDetails: {
+                resetTime: new Date().toISOString(),
+                cairoDate: todayCairo,
+                dayCleared: dayToClear,
+                tasksCleared: tasksToClear.length,
+                timezone: CAIRO_TIMEZONE,
+            },
+        }, req);
+    }
+    saveLastResetDate(todayCairo);
+}
+
+/**
  * GET /api/v1/focus/data
  * Get current user's focus tasks and library tasks (requires auth)
  */
@@ -57,8 +122,11 @@ router.get("/focus/data", authMiddleware, async (req, res) => {
         if (!userId) {
             return sendError(res, 401, "Unauthorized", { code: CODES.UNAUTHORIZED });
         }
-        const todayStart = startOfDay(new Date());
-        const todayEnd = endOfDay(new Date());
+
+        await checkAndRunMidnightCairoReset(req);
+
+        const todayCairo = getCairoDateString();
+        const { start: todayStart, end: todayEnd } = getCairoDayRangeUtc(todayCairo);
 
         const [focusTasks, libraryTasks] = await Promise.all([
             prisma.task.findMany({
@@ -119,8 +187,7 @@ router.post("/focus/clear-my", authMiddleware, async (req, res) => {
         if (!userId) {
             return sendError(res, 401, "Unauthorized", { code: CODES.UNAUTHORIZED });
         }
-        const todayStart = startOfDay(new Date());
-        const todayEnd = endOfDay(new Date());
+        const { start: todayStart, end: todayEnd } = getCairoDayRangeUtc(getCairoDateString());
 
         const tasksToClear = await prisma.task.findMany({
             where: {
@@ -135,6 +202,13 @@ router.post("/focus/clear-my", authMiddleware, async (req, res) => {
                 where: { id: { in: tasksToClear.map((t) => t.id) } },
                 data: { plannedDate: null },
             });
+            await logActivity({
+                actionType: "user_cleared_focus",
+                actionCategory: "today_task",
+                performedById: userId,
+                actionSummary: `Cleared my today's focus (${tasksToClear.length} task(s))`,
+                actionDetails: { tasksCleared: tasksToClear.length },
+            }, req);
         }
 
         sendSuccess(res, {
@@ -180,10 +254,9 @@ router.get("/focus/should-reset", async (req, res) => {
  */
 router.post("/focus/clear-all", async (req, res) => {
     try {
-        const todayStart = startOfDay(new Date());
-        const todayEnd = endOfDay(new Date());
+        const { start: todayStart, end: todayEnd } = getCairoDayRangeUtc(getCairoDateString());
 
-        // Find all tasks scheduled for today
+        // Find all tasks scheduled for today (Cairo) with assignees for notifications
         const tasksToClear = await prisma.task.findMany({
             where: {
                 plannedDate: {
@@ -191,37 +264,47 @@ router.post("/focus/clear-all", async (req, res) => {
                     lte: todayEnd,
                 },
             },
-            select: { id: true },
+            select: { id: true, assignees: { select: { id: true } } },
         });
 
         if (tasksToClear.length > 0) {
+            const taskIds = tasksToClear.map((t) => t.id);
+            const assigneeIds = [...new Set(tasksToClear.flatMap((t) => (t.assignees || []).map((a) => a.id)))];
+
             // Clear plannedDate
             await prisma.task.updateMany({
-                where: {
-                    id: { in: tasksToClear.map((t) => t.id) },
-                },
+                where: { id: { in: taskIds } },
                 data: { plannedDate: null },
             });
 
-            // Log activity
-            await prisma.activityLog.create({
-                data: {
-                    actionType: "system_reset_focus",
-                    actionCategory: "today_task",
-                    actionSummary: `Automatic daily reset cleared ${tasksToClear.length} tasks from today's focus`,
-                    actionDetails: JSON.stringify({
-                        resetTime: new Date().toISOString(),
-                        cairoDate: getCairoDateString(),
-                        tasksCleared: tasksToClear.length,
-                        timezone: CAIRO_TIMEZONE,
-                    }),
-                    entityType: "system",
-                    entityId: 0,
+            if (assigneeIds.length > 0) {
+                await notifyUsers(
+                    assigneeIds.map((userId) => ({
+                        userId,
+                        title: "Today's focus was cleared",
+                        message: "Your today's focus tasks have been cleared (by admin or system reset).",
+                        type: "focus_cleared",
+                        linkUrl: "/dashboard/focus",
+                    }))
+                );
+            }
+
+            await logActivity({
+                actionType: "system_reset_focus",
+                actionCategory: "today_task",
+                entityType: "system",
+                entityId: 0,
+                performedById: req.user?.id ?? null,
+                actionSummary: `System reset cleared ${tasksToClear.length} tasks from today's focus`,
+                actionDetails: {
+                    resetTime: new Date().toISOString(),
+                    cairoDate: getCairoDateString(),
+                    tasksCleared: tasksToClear.length,
+                    timezone: CAIRO_TIMEZONE,
                 },
-            });
+            }, req);
         }
 
-        // Update tracker file
         saveLastResetDate(getCairoDateString());
 
         console.log(`✅ Auto-reset: Cleared ${tasksToClear.length} tasks from today's focus`);
@@ -255,14 +338,14 @@ router.post("/focus/auto-reset", async (req, res) => {
             console.log(`🔄 New day detected in Cairo timezone: ${cairoTime}`);
             console.log("Triggering automatic reset of today's focus...");
 
-            const todayStart = startOfDay(new Date());
-            const todayEnd = endOfDay(new Date());
+            const dayToClear = lastReset || getCairoDateStringDaysAgo(1);
+            const { start: clearStart, end: clearEnd } = getCairoDayRangeUtc(dayToClear);
 
             const tasksToClear = await prisma.task.findMany({
                 where: {
                     plannedDate: {
-                        gte: todayStart,
-                        lte: todayEnd,
+                        gte: clearStart,
+                        lte: clearEnd,
                     },
                 },
                 select: { id: true },
@@ -276,21 +359,20 @@ router.post("/focus/auto-reset", async (req, res) => {
                     data: { plannedDate: null },
                 });
 
-                await prisma.activityLog.create({
-                    data: {
-                        actionType: "system_reset_focus",
-                        actionCategory: "today_task",
-                        actionSummary: `Automatic daily reset cleared ${tasksToClear.length} tasks from today's focus`,
-                        actionDetails: JSON.stringify({
-                            resetTime: new Date().toISOString(),
-                            cairoDate: getCairoDateString(),
-                            tasksCleared: tasksToClear.length,
-                            timezone: CAIRO_TIMEZONE,
-                        }),
-                        entityType: "system",
-                        entityId: 0,
+                await logActivity({
+                    actionType: "system_reset_focus",
+                    actionCategory: "today_task",
+                    entityType: "system",
+                    entityId: 0,
+                    performedById: null,
+                    actionSummary: `Automatic daily reset cleared ${tasksToClear.length} tasks from today's focus`,
+                    actionDetails: {
+                        resetTime: new Date().toISOString(),
+                        cairoDate: getCairoDateString(),
+                        tasksCleared: tasksToClear.length,
+                        timezone: CAIRO_TIMEZONE,
                     },
-                });
+                }, req);
             }
 
             saveLastResetDate(getCairoDateString());

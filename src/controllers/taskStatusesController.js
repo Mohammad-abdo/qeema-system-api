@@ -2,6 +2,7 @@
 
 const { prisma } = require("../lib/prisma");
 const { sendError, CODES } = require("../lib/errorResponse");
+const { logActivity } = require("../lib/activityLogger");
 
 async function list(req, res) {
   try {
@@ -70,7 +71,17 @@ async function create(req, res) {
         isActive: Boolean(isActive),
       },
     });
-
+    const userId = Number(req.user?.id);
+    if (userId) {
+      await logActivity({
+        actionType: "task_status_created",
+        actionCategory: "settings",
+        entityType: "task_status",
+        entityId: taskStatus.id,
+        performedById: userId,
+        actionSummary: `Task status '${taskStatus.name}' created`,
+      }, req);
+    }
     return res.status(201).json({ success: true, taskStatus });
   } catch (err) {
     if (err.code === "P2002") return sendError(res, 409, "A task status with this name already exists", { code: "CONFLICT", requestId: req.id });
@@ -107,7 +118,17 @@ async function update(req, res) {
         ...(isActive !== undefined && { isActive: Boolean(isActive) }),
       },
     });
-
+    const userId = Number(req.user?.id);
+    if (userId) {
+      await logActivity({
+        actionType: "task_status_updated",
+        actionCategory: "settings",
+        entityType: "task_status",
+        entityId: id,
+        performedById: userId,
+        actionSummary: `Task status '${existing.name}' updated`,
+      }, req);
+    }
     return res.json({ success: true, taskStatus });
   } catch (err) {
     if (err.code === "P2002") return sendError(res, 409, "A task status with this name already exists", { code: "CONFLICT", requestId: req.id });
@@ -130,7 +151,17 @@ async function remove(req, res) {
     if (status.tasks.length > 0) {
       return sendError(res, 400, "Cannot delete: status is assigned to existing tasks. Deactivate it instead.", { code: CODES.BAD_REQUEST, requestId: req.id });
     }
-
+    const userId = Number(req.user?.id);
+    if (userId) {
+      await logActivity({
+        actionType: "task_status_deleted",
+        actionCategory: "settings",
+        entityType: "task_status",
+        entityId: id,
+        performedById: userId,
+        actionSummary: `Task status '${status.name}' deleted`,
+      }, req);
+    }
     await prisma.taskStatus.delete({ where: { id } });
     return res.json({ success: true });
   } catch (err) {

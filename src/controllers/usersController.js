@@ -4,6 +4,7 @@ const bcrypt = require("bcryptjs");
 const { prisma } = require("../lib/prisma");
 const { hasPermissionWithoutRoleBypass } = require("../lib/rbac");
 const { sendError, CODES } = require("../lib/errorResponse");
+const { logActivity } = require("../lib/activityLogger");
 
 async function list(req, res) {
   try {
@@ -128,6 +129,15 @@ async function create(req, res) {
         },
       });
     }
+    await logActivity({
+      actionType: "user_created",
+      actionCategory: "user",
+      entityType: "user",
+      entityId: newUser.id,
+      performedById: userId,
+      affectedUserId: newUser.id,
+      actionSummary: `User ${newUser.username} (${newUser.email}) created`,
+    }, req);
     return res.status(201).json({ success: true, user: newUser });
   } catch (err) {
     console.error("[usersController] create:", err);
@@ -153,6 +163,15 @@ async function update(req, res) {
     if (body.isActive !== undefined) data.isActive = Boolean(body.isActive);
     if (Object.keys(data).length) {
       await prisma.user.update({ where: { id }, data });
+      await logActivity({
+        actionType: "user_updated",
+        actionCategory: "user",
+        entityType: "user",
+        entityId: id,
+        performedById: userId,
+        affectedUserId: id,
+        actionSummary: `User ${existing.username} (${existing.email}) updated`,
+      }, req);
     }
     return res.json({ success: true });
   } catch (err) {
@@ -187,6 +206,15 @@ async function remove(req, res) {
     if (user.teamsLed.length > 0) {
       return sendError(res, 400, "User is leading teams; reassign first", { code: CODES.BAD_REQUEST, requestId: req.id });
     }
+    await logActivity({
+      actionType: "user_deleted",
+      actionCategory: "user",
+      entityType: "user",
+      entityId: id,
+      performedById: userId,
+      affectedUserId: id,
+      actionSummary: `User ${user.username} (${user.email}) deleted`,
+    }, req);
     await prisma.$transaction(async (tx) => {
       await tx.activityLog.updateMany({ where: { performedById: id }, data: { performedById: null } });
       await tx.activityLog.updateMany({ where: { affectedUserId: id }, data: { affectedUserId: null } });

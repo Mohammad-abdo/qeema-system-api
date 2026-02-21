@@ -3,6 +3,8 @@
 const { prisma } = require("../lib/prisma");
 const { hasPermissionWithoutRoleBypass } = require("../lib/rbac");
 const { sendError, sendSuccess, CODES } = require("../lib/errorResponse");
+const { logActivity } = require("../lib/activityLogger");
+const { notifyUsers } = require("../lib/notifyUsers");
 const { startOfDay, endOfDay } = require("date-fns");
 
 async function canAccessAssignment(userId) {
@@ -291,6 +293,7 @@ async function assignToday(req, res) {
 
     const task = await prisma.task.findFirst({
       where: { id: tid, assignees: { some: { id: targetUserId } } },
+      include: { project: { select: { name: true } } },
     });
     if (!task) {
       return sendError(res, 404, "Task not found or not assigned to this user", { code: CODES.NOT_FOUND, requestId: req.id });
@@ -302,6 +305,31 @@ async function assignToday(req, res) {
       data: { plannedDate: targetDate },
     });
 
+    if (targetUserId !== currentUserId) {
+      const dateStr = targetDate.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+      const projectName = task.project?.name ?? "Project";
+      const projectId = task.projectId ?? 0;
+      await prisma.notification.create({
+        data: {
+          userId: targetUserId,
+          title: `Task assigned: ${task.title}`,
+          message: `Scheduled for ${dateStr} in ${projectName}.`,
+          type: "task_assigned",
+          linkUrl: projectId ? `/dashboard/projects/${projectId}/tasks/${tid}` : null,
+        },
+      });
+    }
+
+    await logActivity({
+      actionType: "task_assigned_today",
+      actionCategory: "today_task",
+      entityType: "task",
+      entityId: tid,
+      projectId: task.projectId ?? null,
+      performedById: currentUserId,
+      affectedUserId: targetUserId,
+      actionSummary: `Task '${task.title}' assigned to today for user #${targetUserId}`,
+    }, req);
     return res.json({ success: true });
   } catch (err) {
     console.error("[assignmentController] assignToday:", err);
@@ -325,6 +353,7 @@ async function removeToday(req, res) {
 
     const task = await prisma.task.findFirst({
       where: { id: tid, assignees: { some: { id: targetUserId } } },
+      select: { id: true, title: true, projectId: true },
     });
     if (!task) {
       return sendError(res, 404, "Task not found or not assigned to this user", { code: CODES.NOT_FOUND, requestId: req.id });
@@ -335,6 +364,27 @@ async function removeToday(req, res) {
       data: { plannedDate: null },
     });
 
+    const taskLink = task.projectId ? `/dashboard/projects/${task.projectId}/tasks/${tid}` : null;
+    await notifyUsers([
+      {
+        userId: targetUserId,
+        title: "Task removed from your today's focus",
+        message: task.title,
+        type: "focus_changed",
+        linkUrl: taskLink,
+      },
+    ]);
+
+    await logActivity({
+      actionType: "task_removed_today",
+      actionCategory: "today_task",
+      entityType: "task",
+      entityId: tid,
+      projectId: task.projectId ?? null,
+      performedById: currentUserId,
+      affectedUserId: targetUserId,
+      actionSummary: `Task '${task.title}' removed from today for user #${targetUserId}`,
+    }, req);
     return res.json({ success: true });
   } catch (err) {
     console.error("[assignmentController] removeToday:", err);

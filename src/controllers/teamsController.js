@@ -3,6 +3,7 @@
 const { prisma } = require("../lib/prisma");
 const { hasPermissionWithoutRoleBypass } = require("../lib/rbac");
 const { sendError, CODES } = require("../lib/errorResponse");
+const { logActivity } = require("../lib/activityLogger");
 
 async function list(req, res) {
   try {
@@ -111,6 +112,14 @@ async function create(req, res) {
         status: body.status === "inactive" ? "inactive" : "active",
       },
     });
+    await logActivity({
+      actionType: "team_created",
+      actionCategory: "team",
+      entityType: "team",
+      entityId: team.id,
+      performedById: userId,
+      actionSummary: `Team '${team.name}' created`,
+    }, req);
     return res.status(201).json({ success: true, id: team.id, team });
   } catch (err) {
     console.error("[teamsController] create:", err);
@@ -142,6 +151,14 @@ async function update(req, res) {
         ...(body.status !== undefined && { status: body.status === "inactive" ? "inactive" : "active" }),
       },
     });
+    await logActivity({
+      actionType: "team_updated",
+      actionCategory: "team",
+      entityType: "team",
+      entityId: id,
+      performedById: userId,
+      actionSummary: `Team '${existing.name}' updated`,
+    }, req);
     return res.json({ success: true });
   } catch (err) {
     console.error("[teamsController] update:", err);
@@ -163,6 +180,14 @@ async function remove(req, res) {
       return sendError(res, 403, "Permission denied", { code: CODES.FORBIDDEN, requestId: req.id });
     }
 
+    await logActivity({
+      actionType: "team_deleted",
+      actionCategory: "team",
+      entityType: "team",
+      entityId: id,
+      performedById: userId,
+      actionSummary: `Team '${existing.name}' deleted`,
+    }, req);
     await prisma.team.delete({ where: { id } });
     return res.json({ success: true });
   } catch (err) {
@@ -230,6 +255,15 @@ async function removeMember(req, res) {
     const allowed = await hasPermissionWithoutRoleBypass(userId, "team.update");
     if (!allowed) return sendError(res, 403, "Permission denied", { code: CODES.FORBIDDEN, requestId: req.id });
 
+    await logActivity({
+      actionType: "team_member_removed",
+      actionCategory: "team",
+      entityType: "team",
+      entityId: teamId,
+      performedById: userId,
+      affectedUserId: memberUserId,
+      actionSummary: `User #${memberUserId} removed from team #${teamId}`,
+    }, req);
     await prisma.teamMember.delete({
       where: {
         teamId_userId: { teamId, userId: memberUserId },

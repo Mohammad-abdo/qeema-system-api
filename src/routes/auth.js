@@ -5,6 +5,7 @@ const { PrismaClient } = require("@prisma/client");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { sendSuccess, sendError, CODES } = require("../lib/errorResponse");
+const { logActivity } = require("../lib/activityLogger");
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -76,6 +77,15 @@ router.post("/auth/register", async (req, res) => {
 
         console.log(`✅ New user registered: ${username}`);
 
+        await logActivity({
+            actionType: "user_registered",
+            actionCategory: "auth",
+            entityType: "user",
+            entityId: user.id,
+            performedById: user.id,
+            actionSummary: `User ${username} (${email}) registered`,
+        }, req);
+
         sendSuccess(res, {
             message: "User registered successfully",
             user,
@@ -84,7 +94,6 @@ router.post("/auth/register", async (req, res) => {
         console.error("Registration error:", error);
         sendError(res, 500, "Failed to register user", {
             code: CODES.INTERNAL_ERROR,
-            details: error.message,
         });
     }
 });
@@ -153,6 +162,15 @@ router.post("/auth/login", async (req, res) => {
 
         console.log(`✅ User logged in: ${username}`);
 
+        await logActivity({
+            actionType: "user_login",
+            actionCategory: "auth",
+            entityType: "user",
+            entityId: user.id,
+            performedById: user.id,
+            actionSummary: `User ${username} logged in`,
+        }, req);
+
         sendSuccess(res, {
             message: "Login successful",
             token,
@@ -167,7 +185,6 @@ router.post("/auth/login", async (req, res) => {
         console.error("Login error:", error);
         sendError(res, 500, "Failed to login", {
             code: CODES.INTERNAL_ERROR,
-            details: error.message,
         });
     }
 });

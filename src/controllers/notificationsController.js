@@ -2,6 +2,7 @@
 
 const { prisma } = require("../lib/prisma");
 const { sendError, CODES } = require("../lib/errorResponse");
+const { logActivity } = require("../lib/activityLogger");
 
 async function list(req, res) {
   try {
@@ -51,7 +52,14 @@ async function markAsRead(req, res) {
       where: { id },
       data: { isRead: true },
     });
-
+    await logActivity({
+      actionType: "notification_marked_read",
+      actionCategory: "notification",
+      entityType: "notification",
+      entityId: id,
+      performedById: userId,
+      actionSummary: `Notification #${id} marked as read`,
+    }, req);
     return res.json({ success: true });
   } catch (err) {
     console.error("[notificationsController] markAsRead:", err);
@@ -67,7 +75,12 @@ async function markAllAsRead(req, res) {
       where: { userId, isRead: false },
       data: { isRead: true },
     });
-
+    await logActivity({
+      actionType: "notifications_marked_all_read",
+      actionCategory: "notification",
+      performedById: userId,
+      actionSummary: "All notifications marked as read",
+    }, req);
     return res.json({ success: true });
   } catch (err) {
     console.error("[notificationsController] markAllAsRead:", err);
@@ -86,6 +99,14 @@ async function remove(req, res) {
       return sendError(res, 404, "Notification not found", { code: CODES.NOT_FOUND, requestId: req.id });
     }
 
+    await logActivity({
+      actionType: "notification_deleted",
+      actionCategory: "notification",
+      entityType: "notification",
+      entityId: id,
+      performedById: userId,
+      actionSummary: `Notification #${id} deleted`,
+    }, req);
     await prisma.notification.delete({ where: { id } });
     return res.json({ success: true });
   } catch (err) {

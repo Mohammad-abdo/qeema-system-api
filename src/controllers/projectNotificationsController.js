@@ -3,6 +3,7 @@
 const { prisma } = require("../lib/prisma");
 const { sendError, CODES } = require("../lib/errorResponse");
 const { hasPermissionWithoutRoleBypass } = require("../lib/rbac");
+const { logActivity } = require("../lib/activityLogger");
 
 async function ensureProjectAccess(req, projectId) {
   const userId = Number(req.user?.id);
@@ -92,7 +93,15 @@ async function markAsRead(req, res) {
       where: { id: notificationId },
       data: { isRead: true },
     });
-
+    await logActivity({
+      actionType: "project_notification_marked_read",
+      actionCategory: "notification",
+      entityType: "notification",
+      entityId: notificationId,
+      projectId: access.projectId,
+      performedById: access.userId,
+      actionSummary: `Project notification #${notificationId} marked as read`,
+    }, req);
     return res.json({ success: true });
   } catch (err) {
     console.error("[projectNotificationsController] markAsRead:", err);
@@ -118,7 +127,13 @@ async function markAllAsRead(req, res) {
       },
       data: { isRead: true },
     });
-
+    await logActivity({
+      actionType: "project_notifications_marked_all_read",
+      actionCategory: "notification",
+      projectId: access.projectId,
+      performedById: access.userId,
+      actionSummary: `All project notifications marked as read for project #${access.projectId}`,
+    }, req);
     return res.json({ success: true });
   } catch (err) {
     console.error("[projectNotificationsController] markAllAsRead:", err);

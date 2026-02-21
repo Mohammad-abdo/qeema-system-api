@@ -313,6 +313,7 @@ model Notification {
   title     String
   message   String
   type      String   @default("info")
+  linkUrl   String?  @map("link_url")
   isRead    Boolean  @default(false) @map("is_read")
   createdAt DateTime @default(now()) @map("created_at")
   userId    Int      @map("user_id")

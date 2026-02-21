@@ -3,6 +3,8 @@
 const { prisma } = require("../lib/prisma");
 const { hasPermissionWithoutRoleBypass } = require("../lib/rbac");
 const { sendError, CODES } = require("../lib/errorResponse");
+const { logActivity } = require("../lib/activityLogger");
+const { notifyUsers } = require("../lib/notifyUsers");
 
 function buildListWhere(query, userId) {
   const where = {};
@@ -255,6 +257,15 @@ async function create(req, res) {
         createdById: userId,
       },
     });
+    await logActivity({
+      actionType: "project_created",
+      actionCategory: "project",
+      entityType: "project",
+      entityId: project.id,
+      projectId: project.id,
+      performedById: userId,
+      actionSummary: `Project '${project.name}' created`,
+    }, req);
     return res.status(200).json({ success: true, id: project.id });
   } catch (err) {
     console.error("[projectsController] create:", err);
@@ -270,7 +281,7 @@ async function update(req, res) {
 
     const existing = await prisma.project.findUnique({
       where: { id },
-      select: { id: true, createdById: true },
+      select: { id: true, name: true, createdById: true, projectStatusId: true, status: true, projectManagerId: true },
     });
     if (!existing) return sendError(res, 404, "Project not found", { code: CODES.NOT_FOUND, requestId: req.id });
 
@@ -309,6 +320,43 @@ async function update(req, res) {
         projectManagerId: body.projectManagerId != null && body.projectManagerId > 0 ? body.projectManagerId : null,
       },
     });
+
+    const statusChanged =
+      (projectStatusId != null && projectStatusId !== existing.projectStatusId) ||
+      (statusName != null && statusName !== existing.status);
+    if (statusChanged) {
+      const assignees = await prisma.task.findMany({
+        where: { projectId: id },
+        select: { assignees: { select: { id: true } } },
+      });
+      const assigneeIds = [...new Set(assignees.flatMap((t) => (t.assignees || []).map((a) => a.id)))];
+      const memberIds = new Set(assigneeIds);
+      if (existing.projectManagerId) memberIds.add(existing.projectManagerId);
+      memberIds.delete(userId);
+      const toNotify = [...memberIds];
+      if (toNotify.length > 0) {
+        const displayStatus = statusName || (projectStatusId ? (await prisma.projectStatus.findUnique({ where: { id: projectStatusId }, select: { name: true } }))?.name : null) || "updated";
+        await notifyUsers(
+          toNotify.map((uid) => ({
+            userId: uid,
+            title: "Project updated",
+            message: `Project '${existing.name}' status: ${displayStatus}`,
+            type: "project_updated",
+            linkUrl: `/dashboard/projects/${id}`,
+          }))
+        );
+      }
+    }
+
+    await logActivity({
+      actionType: "project_updated",
+      actionCategory: "project",
+      entityType: "project",
+      entityId: id,
+      projectId: id,
+      performedById: userId,
+      actionSummary: `Project '${existing.name}' updated`,
+    }, req);
     return res.json({ success: true });
   } catch (err) {
     console.error("[projectsController] update:", err);
@@ -324,7 +372,7 @@ async function remove(req, res) {
 
     const existing = await prisma.project.findUnique({
       where: { id },
-      select: { id: true, createdById: true },
+      select: { id: true, name: true, createdById: true },
     });
     if (!existing) return sendError(res, 404, "Project not found", { code: CODES.NOT_FOUND, requestId: req.id });
 
@@ -334,6 +382,15 @@ async function remove(req, res) {
       return sendError(res, 403, "Permission denied", { code: CODES.FORBIDDEN, requestId: req.id });
     }
 
+    await logActivity({
+      actionType: "project_deleted",
+      actionCategory: "project",
+      entityType: "project",
+      entityId: id,
+      projectId: id,
+      performedById: userId,
+      actionSummary: `Project '${existing.name}' deleted`,
+    }, req);
     await prisma.project.delete({ where: { id } });
     return res.json({ success: true });
   } catch (err) {

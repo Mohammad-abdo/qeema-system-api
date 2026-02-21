@@ -2,6 +2,7 @@
 
 const { prisma } = require("../lib/prisma");
 const { sendError, CODES } = require("../lib/errorResponse");
+const { logActivity } = require("../lib/activityLogger");
 
 async function list(req, res) {
   try {
@@ -60,7 +61,17 @@ async function create(req, res) {
         icon: icon != null ? String(icon) : null,
       },
     });
-
+    const userId = Number(req.user?.id);
+    if (userId) {
+      await logActivity({
+        actionType: "project_type_created",
+        actionCategory: "settings",
+        entityType: "project_type",
+        entityId: projectType.id,
+        performedById: userId,
+        actionSummary: `Project type '${projectType.name}' created`,
+      }, req);
+    }
     return res.status(201).json({ success: true, projectType });
   } catch (err) {
     if (err.code === "P2002") return sendError(res, 409, "A project type with this name already exists", { code: "CONFLICT", requestId: req.id });
@@ -89,7 +100,17 @@ async function update(req, res) {
         ...(icon !== undefined && { icon: icon != null ? String(icon) : null }),
       },
     });
-
+    const userId = Number(req.user?.id);
+    if (userId) {
+      await logActivity({
+        actionType: "project_type_updated",
+        actionCategory: "settings",
+        entityType: "project_type",
+        entityId: id,
+        performedById: userId,
+        actionSummary: `Project type '${existing.name}' updated`,
+      }, req);
+    }
     return res.json({ success: true, projectType });
   } catch (err) {
     if (err.code === "P2002") return sendError(res, 409, "A project type with this name already exists", { code: "CONFLICT", requestId: req.id });
@@ -110,7 +131,17 @@ async function remove(req, res) {
 
     const type = await prisma.projectType.findUnique({ where: { id } });
     if (!type) return sendError(res, 404, "Project type not found", { code: CODES.NOT_FOUND, requestId: req.id });
-
+    const userId = Number(req.user?.id);
+    if (userId) {
+      await logActivity({
+        actionType: "project_type_deleted",
+        actionCategory: "settings",
+        entityType: "project_type",
+        entityId: id,
+        performedById: userId,
+        actionSummary: `Project type '${type.name}' deleted`,
+      }, req);
+    }
     await prisma.projectType.delete({ where: { id } });
     return res.json({ success: true });
   } catch (err) {

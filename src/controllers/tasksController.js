@@ -5,6 +5,7 @@ const { hasPermissionWithoutRoleBypass } = require("../lib/rbac");
 const { sendError, CODES } = require("../lib/errorResponse");
 const { logActivity } = require("../lib/activityLogger");
 const { notifyUsers } = require("../lib/notifyUsers");
+const { startOfDay, endOfDay } = require("date-fns");
 
 function buildListWhere(query, userId) {
   const where = {};
@@ -54,8 +55,14 @@ function buildListWhere(query, userId) {
         ? "createdAt"
         : "dueDate";
     where.AND = where.AND || [];
-    if (query.startDate) where.AND.push({ [dateField]: { gte: new Date(query.startDate) } });
-    if (query.endDate) where.AND.push({ [dateField]: { lte: new Date(query.endDate) } });
+    if (query.startDate) {
+      const start = startOfDay(new Date(query.startDate));
+      where.AND.push({ [dateField]: { gte: start } });
+    }
+    if (query.endDate) {
+      const end = endOfDay(new Date(query.endDate));
+      where.AND.push({ [dateField]: { lte: end } });
+    }
   }
 
   return where;
@@ -161,13 +168,31 @@ const taskGetOneSelect = {
 async function list(req, res) {
   try {
     const userId = req.user.id;
+    const userIdNum = Number(userId);
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
     const where = buildListWhere(req.query, userId);
-    if (req.user.role !== "admin") {
+
+    const isTodayFocus = req.query.filter === "today_focus";
+    if (isTodayFocus) {
+      const canViewAll = await hasPermissionWithoutRoleBypass(userId, "project.viewAll");
+      const isAdmin = req.user.role === "admin";
+      if (!isAdmin && !canViewAll) {
+        where.AND = where.AND || [];
+        where.AND.push({
+          project: {
+            OR: [
+              { projectManagerId: userIdNum },
+              { createdById: userIdNum },
+              { projectUsers: { some: { userId: userIdNum } } },
+            ],
+          },
+        });
+      }
+    } else if (req.user.role !== "admin") {
       const userConditions = [
-        { assignees: { some: { id: Number(userId) } } },
-        { createdById: Number(userId) },
+        { assignees: { some: { id: userIdNum } } },
+        { createdById: userIdNum },
       ];
       if (where.OR) {
         where.AND = where.AND || [];
@@ -177,6 +202,7 @@ async function list(req, res) {
         where.OR = userConditions;
       }
     }
+
     const skip = (page - 1) * limit;
     const [tasks, total] = await Promise.all([
       prisma.task.findMany({
@@ -649,7 +675,7 @@ async function getDependencyCandidates(req, res) {
     });
     excludeIds.push(...cycleCandidates.map((c) => c.taskId));
 
-    const where = { id: { notIn: excludeIds } };
+    const where = { id: { notIn: excludeIds }, projectId: access.task.projectId };
     const andParts = [];
     if (search) {
       andParts.push({

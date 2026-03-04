@@ -162,6 +162,30 @@ async function summary(req, res) {
       }),
     ]);
 
+    const weeklyTaskTrend = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dayStart = startOfDay(d);
+      const dayEnd = endOfDay(d);
+      const dateStr = d.toISOString().slice(0, 10);
+      const [created, completed] = await Promise.all([
+        prisma.task.count({
+          where: {
+            ...tasksWhereBase,
+            createdAt: { gte: dayStart, lte: dayEnd },
+          },
+        }),
+        prisma.task.count({
+          where: {
+            ...tasksWhereBase,
+            completedAt: { not: null, gte: dayStart, lte: dayEnd },
+          },
+        }),
+      ]);
+      weeklyTaskTrend.push({ date: dateStr, created, completed });
+    }
+
     return res.json({
       success: true,
       data: {
@@ -179,6 +203,7 @@ async function summary(req, res) {
         taskStatusCounts,
         legacyActive: legacyActiveCount,
         legacyOnHold: legacyOnHoldCount,
+        weeklyTaskTrend,
       },
     });
   } catch (err) {

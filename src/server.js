@@ -31,6 +31,7 @@ const authRouter = require("./routes/auth");
 const systemSettingsRouter = require("./routes/system-settings");
 const rbacRouter = require("./routes/rbac");
 const attachmentsRouter = require("./routes/attachments");
+const reportsRouter = require("./routes/reports");
 
 const app = express();
 const PORT = Number(process.env.PORT) || 4000;
@@ -109,6 +110,7 @@ app.use("/api/v1", assignmentRouter);
 app.use("/api/v1", systemSettingsRouter);
 app.use("/api/v1", rbacRouter);
 app.use("/api/v1", attachmentsRouter);
+app.use("/api/v1/reports", reportsRouter);
 
 if (process.env.SENTRY_DSN && Sentry) {
   app.use(Sentry.Handlers.errorHandler());

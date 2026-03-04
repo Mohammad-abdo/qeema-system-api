@@ -154,6 +154,9 @@ async function updateRole(req, res) {
     const data = {};
     if (name !== undefined) data.name = String(name).trim();
     if (description !== undefined) data.description = description ? String(description).trim() : null;
+    if (data.name !== undefined && data.name === "") {
+      return sendError(res, 400, "Role name cannot be empty", { code: CODES.BAD_REQUEST, requestId });
+    }
     const updated = await prisma.role.update({ where: { id: roleId }, data });
     await logActivity({
       actionType: "role_updated",

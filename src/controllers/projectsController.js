@@ -167,6 +167,7 @@ async function getOne(req, res) {
           taskStatusId: true,
           priority: true,
           dueDate: true,
+          plannedDate: true,
           createdAt: true,
           assignees: {
             select: { id: true, username: true, email: true, avatarUrl: true },

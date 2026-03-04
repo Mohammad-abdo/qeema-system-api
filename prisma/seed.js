@@ -45,6 +45,7 @@ const PERMISSIONS = {
         READ: 'project.read',
         UPDATE: 'project.update',
         DELETE: 'project.delete',
+        VIEW_ALL: 'project.viewAll',
         ASSIGN_TEAM: 'project.assign_team',
         REMOVE_TEAM: 'project.remove_team',
         MANAGE_SETTINGS: 'project.manage_settings',

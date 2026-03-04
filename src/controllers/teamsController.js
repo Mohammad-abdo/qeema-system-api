@@ -7,6 +7,12 @@ const { logActivity } = require("../lib/activityLogger");
 
 async function list(req, res) {
   try {
+    const userId = Number(req.user?.id);
+    if (!userId) return sendError(res, 401, "Unauthorized", { code: CODES.UNAUTHORIZED, requestId: req.id });
+    const allowed = await hasPermissionWithoutRoleBypass(userId, "team.read");
+    if (!allowed) {
+      return sendError(res, 403, "Permission denied: You don't have permission to list teams", { code: CODES.FORBIDDEN, requestId: req.id });
+    }
     const teams = await prisma.team.findMany({
       include: {
         _count: {
@@ -44,6 +50,12 @@ async function list(req, res) {
 
 async function getOne(req, res) {
   try {
+    const userId = Number(req.user?.id);
+    if (!userId) return sendError(res, 401, "Unauthorized", { code: CODES.UNAUTHORIZED, requestId: req.id });
+    const allowed = await hasPermissionWithoutRoleBypass(userId, "team.read");
+    if (!allowed) {
+      return sendError(res, 403, "Permission denied: You don't have permission to view this team", { code: CODES.FORBIDDEN, requestId: req.id });
+    }
     const id = parseInt(req.params.id, 10);
     if (Number.isNaN(id)) return sendError(res, 400, "Invalid team ID", { code: CODES.BAD_REQUEST, requestId: req.id });
 

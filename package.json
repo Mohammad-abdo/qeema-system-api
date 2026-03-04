@@ -10,6 +10,7 @@
     "prisma:generate": "prisma generate --schema=./prisma/schema.prisma",
     "prisma:seed": "node prisma/seed.js",
     "test:api": "node scripts/test-api.js",
+    "test:kpis": "node src/tests/todaysFocusReportKpis.test.js",
     "script:init-rbac": "node scripts/initialize-rbac.js",
     "script:list-users": "node scripts/list-users.js",
     "script:verify-db": "node scripts/verify-db-counts.js",

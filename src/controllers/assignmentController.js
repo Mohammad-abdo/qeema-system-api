@@ -121,7 +121,7 @@ async function getProjectsWithTasks(req, res) {
             status: { not: "completed" },
           },
           include: {
-            assignees: { select: { id: true, username: true, email: true } },
+            assignees: { where: { isActive: true }, select: { id: true, username: true, email: true } },
             dependencies: {
               include: {
                 dependsOnTask: { select: { id: true, title: true, status: true } },
@@ -237,7 +237,7 @@ async function getUserProjectTasks(req, res) {
             dependsOnTask: { select: { id: true, title: true, status: true } },
           },
         },
-        assignees: { select: { id: true, username: true } },
+        assignees: { where: { isActive: true }, select: { id: true, username: true } },
       },
       orderBy: { updatedAt: "desc" },
     });

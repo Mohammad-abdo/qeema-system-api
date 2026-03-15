@@ -165,11 +165,15 @@ async function getOne(req, res) {
           description: true,
           status: true,
           taskStatusId: true,
+          taskStatus: {
+            select: { id: true, name: true, isFinal: true },
+          },
           priority: true,
           dueDate: true,
           plannedDate: true,
           createdAt: true,
           assignees: {
+            where: { isActive: true },
             select: { id: true, username: true, email: true, avatarUrl: true },
           },
           attachments: {
@@ -267,7 +271,7 @@ async function create(req, res) {
       performedById: userId,
       actionSummary: `Project '${project.name}' created`,
     }, req);
-    return res.status(200).json({ success: true, id: project.id });
+    return res.status(201).json({ success: true, id: project.id, project });
   } catch (err) {
     console.error("[projectsController] create:", err);
     sendError(res, 500, err.message || "Failed to create project", { code: CODES.INTERNAL_ERROR, requestId: req.id });

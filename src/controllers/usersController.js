@@ -26,6 +26,7 @@ async function list(req, res) {
       const tid = parseInt(query.teamId, 10);
       if (!Number.isNaN(tid)) where.teamId = tid;
     }
+    // Default: only active users (deleted/inactive users excluded from list and assignment dropdowns)
     if (query.isActive === "false" || query.isActive === "0") where.isActive = false;
     else if (query.isActive !== "all" && query.isActive !== "false") where.isActive = true;
 
@@ -223,6 +224,7 @@ async function remove(req, res) {
       affectedUserId: id,
       actionSummary: `User ${user.username} (${user.email}) deleted`,
     }, req);
+    const performerId = userId; // admin performing the delete; used to reassign FKs where needed
     await prisma.$transaction(async (tx) => {
       await tx.activityLog.updateMany({ where: { performedById: id }, data: { performedById: null } });
       await tx.activityLog.updateMany({ where: { affectedUserId: id }, data: { affectedUserId: null } });
@@ -232,6 +234,21 @@ async function remove(req, res) {
       await tx.project.updateMany({ where: { urgentMarkedById: id }, data: { urgentMarkedById: null } });
       await tx.task.updateMany({ where: { createdById: id }, data: { createdById: null } });
       await tx.subtask.updateMany({ where: { assignedToId: id }, data: { assignedToId: null } });
+      // Clear or reassign all other FKs that reference this user (no ON DELETE CASCADE in schema)
+      await tx.comment.deleteMany({ where: { userId: id } });
+      await tx.timeLog.deleteMany({ where: { userId: id } });
+      await tx.notification.deleteMany({ where: { userId: id } });
+      await tx.automationRule.deleteMany({ where: { createdById: id } });
+      await tx.projectUser.deleteMany({ where: { userId: id } });
+      await tx.settingsChangeLog.deleteMany({ where: { userId: id } });
+      await tx.projectSetting.updateMany({ where: { updatedBy: id }, data: { updatedBy: performerId } });
+      await tx.taskDependency.updateMany({ where: { createdById: id }, data: { createdById: performerId } });
+      await tx.subtaskDependency.updateMany({ where: { createdById: id }, data: { createdById: performerId } });
+      await tx.attachment.updateMany({ where: { uploadedById: id }, data: { uploadedById: performerId } });
+      await tx.systemSetting.updateMany({ where: { updatedBy: id }, data: { updatedBy: performerId } });
+      await tx.projectSettingsChangeLog.updateMany({ where: { changedBy: id }, data: { changedBy: performerId } });
+      await tx.userSettingsChangeLog.updateMany({ where: { changedBy: id }, data: { changedBy: performerId } });
+      await tx.userRole.updateMany({ where: { assignedBy: id }, data: { assignedBy: null } });
       await tx.userRole.deleteMany({ where: { userId: id } });
       await tx.user.delete({ where: { id } });
     });

@@ -116,7 +116,7 @@ async function projectsReport(req, res) {
           taskStatusId: true,
           dueDate: true,
           completedAt: true,
-          assignees: { select: { id: true } },
+          assignees: { where: { isActive: true }, select: { id: true } },
         },
       }),
     ]);
@@ -179,7 +179,7 @@ async function projectsReport(req, res) {
           projectId: true,
           taskStatusId: true,
           completedAt: true,
-          assignees: { select: { id: true } },
+          assignees: { where: { isActive: true }, select: { id: true } },
         },
       }),
       (async () => {
@@ -429,7 +429,7 @@ async function todaysFocusReport(req, res) {
             plannedDate: { gte: todayStart, lte: todayEnd }
         },
         include: {
-            assignees: { select: { id: true, username: true, avatarUrl: true } },
+            assignees: { where: { isActive: true }, select: { id: true, username: true, avatarUrl: true } },
             project: { select: { id: true, name: true } },
             timeLogs: { where: { logDate: { gte: todayStart, lte: todayEnd } } }
         }
@@ -680,7 +680,7 @@ async function progressReport(req, res) {
           completedAt: true,
           createdAt: true,
           startedAt: true,
-          assignees: { select: { id: true, username: true } },
+          assignees: { where: { isActive: true }, select: { id: true, username: true } },
           project: { select: { id: true, name: true, endDate: true } },
         },
       }),

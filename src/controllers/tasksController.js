@@ -82,6 +82,7 @@ const taskListSelect = {
   taskStatusId: true,
   taskStatus: { select: { id: true, name: true, color: true, isFinal: true } },
   assignees: {
+    where: { isActive: true },
     select: { id: true, username: true, email: true, avatarUrl: true },
   },
   project: {
@@ -107,12 +108,12 @@ const taskGetOneSelect = {
   completedAt: true,
   taskStatusId: true,
   teamId: true,
-  assignees: { select: { id: true, username: true, email: true, avatarUrl: true } },
+  assignees: { where: { isActive: true }, select: { id: true, username: true, email: true, avatarUrl: true } },
   project: { select: { id: true, name: true } },
   taskStatus: { select: { id: true, name: true, color: true, isFinal: true } },
   team: { select: { id: true, name: true } },
   creator: { select: { id: true, username: true, email: true, avatarUrl: true } },
-  attachments: { select: { id: true, fileName: true, fileUrl: true, fileSize: true, uploadedAt: true } },
+  attachments: { select: { id: true, fileName: true, fileUrl: true, fileType: true, fileSize: true, uploadedAt: true } },
   comments: {
     select: {
       id: true,
@@ -144,7 +145,7 @@ const taskGetOneSelect = {
           projectId: true,
           project: { select: { id: true, name: true } },
           taskStatus: { select: { id: true, name: true, isFinal: true } },
-          assignees: { select: { id: true, username: true, avatarUrl: true } },
+          assignees: { where: { isActive: true }, select: { id: true, username: true, avatarUrl: true } },
         },
       },
     },
@@ -157,7 +158,7 @@ const taskGetOneSelect = {
           id: true,
           title: true,
           status: true,
-          assignees: { select: { id: true, username: true, avatarUrl: true } },
+          assignees: { where: { isActive: true }, select: { id: true, username: true, avatarUrl: true } },
         },
       },
     },
@@ -530,14 +531,51 @@ async function hasUnresolvedDependencies(taskId) {
   );
 }
 
+/**
+ * When a task (dependsOnTaskId) becomes completed, find dependent tasks that were blocked,
+ * unblock them, and notify assignees (or creator if no assignees). Dependency Resolution Notification.
+ */
 async function unblockDependentsIfResolved(dependsOnTaskId) {
   const dependents = await prisma.taskDependency.findMany({
     where: { dependsOnTaskId },
-    select: { taskId: true },
+    select: {
+      taskId: true,
+      task: {
+        select: {
+          id: true,
+          title: true,
+          projectId: true,
+          status: true,
+          createdById: true,
+          assignees: { select: { id: true } },
+        },
+      },
+    },
   });
-  for (const { taskId } of dependents) {
+  for (const { taskId, task } of dependents) {
+    if (!task) continue;
     const stillBlocked = await hasUnresolvedDependencies(taskId);
-    if (!stillBlocked) await setTaskUnblockedStatus(taskId);
+    if (!stillBlocked) {
+      await setTaskUnblockedStatus(taskId);
+      const assigneeIds = (task.assignees || []).map((a) => a.id);
+      const recipientIds = assigneeIds.length > 0
+        ? assigneeIds
+        : task.createdById != null
+          ? [task.createdById]
+          : [];
+      if (recipientIds.length > 0) {
+        const linkUrl = `/dashboard/projects/${task.projectId}/tasks/${task.id}`;
+        await notifyUsers(
+          recipientIds.map((userId) => ({
+            userId,
+            title: "Task unblocked",
+            message: "Your task is now unblocked. You may begin work.",
+            type: "dependency_resolved",
+            linkUrl,
+          }))
+        );
+      }
+    }
   }
 }
 
@@ -559,7 +597,7 @@ async function addDependency(req, res) {
 
     const dependsOnTask = await prisma.task.findUnique({
       where: { id: dependsOnTaskId },
-      select: { id: true, projectId: true, createdById: true, assignees: { select: { id: true } } },
+      select: { id: true, title: true, projectId: true, createdById: true, assignees: { select: { id: true } } },
     });
     if (!dependsOnTask) return sendError(res, 404, "Dependency task not found", { code: CODES.NOT_FOUND, requestId: req.id });
     if (req.user.role !== "admin") {
@@ -610,6 +648,29 @@ async function addDependency(req, res) {
       performedById: userId,
       actionSummary: `Dependency added to task #${taskId} (depends on #${dependsOnTaskId})`,
     }, req);
+
+    // Notify assignees of the blocker task that someone is waiting on them to finish it
+    const blockerTitle = dependsOnTask.title || `Task #${dependsOnTaskId}`;
+    const waitingTaskTitle = access.task?.title || `Task #${taskId}`;
+    const assigneeIds = (dependsOnTask.assignees || []).map((a) => a.id);
+    const recipientIds = assigneeIds.length > 0
+      ? assigneeIds
+      : dependsOnTask.createdById != null
+        ? [dependsOnTask.createdById]
+        : [];
+    if (recipientIds.length > 0) {
+      const linkUrl = `/dashboard/projects/${dependsOnTask.projectId}/tasks/${dependsOnTaskId}`;
+      await notifyUsers(
+        recipientIds.map((uid) => ({
+          userId: uid,
+          title: "Someone is waiting on you",
+          message: `"${waitingTaskTitle}" is blocked by your task "${blockerTitle}". Please finish it so they can proceed.`,
+          type: "dependency_blocking",
+          linkUrl,
+        }))
+      );
+    }
+
     return res.status(201).json({ success: true });
   } catch (err) {
     console.error("[tasksController] addDependency:", err);

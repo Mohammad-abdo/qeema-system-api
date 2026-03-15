@@ -72,43 +72,15 @@ function saveLastResetDate(date) {
 }
 
 /**
- * If we've crossed midnight Cairo since last reset, clear tasks from the previous Cairo day
- * and persist the new reset date. No cron; runs on first focus request of the new day.
+ * If we've crossed midnight Cairo since last reset, persist the new reset date only.
+ * We do NOT clear plannedDate here so that unfinished focus tasks from yesterday remain
+ * queryable for GET /focus/unfinished-yesterday and user can roll them to today via POST /focus/rollover.
  */
 async function checkAndRunMidnightCairoReset(req) {
     const todayCairo = getCairoDateString();
     const lastReset = getLastResetDate();
     const needsReset = !lastReset || lastReset !== todayCairo;
     if (!needsReset) return;
-
-    const dayToClear = lastReset || getCairoDateStringDaysAgo(1);
-    const { start: clearStart, end: clearEnd } = getCairoDayRangeUtc(dayToClear);
-
-    const tasksToClear = await prisma.task.findMany({
-        where: { plannedDate: { gte: clearStart, lte: clearEnd } },
-        select: { id: true },
-    });
-    if (tasksToClear.length > 0) {
-        await prisma.task.updateMany({
-            where: { id: { in: tasksToClear.map((t) => t.id) } },
-            data: { plannedDate: null },
-        });
-        await logActivity({
-            actionType: "system_reset_focus",
-            actionCategory: "today_task",
-            entityType: "system",
-            entityId: 0,
-            performedById: req.user?.id ?? null,
-            actionSummary: `Midnight Cairo auto-reset cleared ${tasksToClear.length} tasks from focus`,
-            actionDetails: {
-                resetTime: new Date().toISOString(),
-                cairoDate: todayCairo,
-                dayCleared: dayToClear,
-                tasksCleared: tasksToClear.length,
-                timezone: CAIRO_TIMEZONE,
-            },
-        }, req);
-    }
     saveLastResetDate(todayCairo);
 }
 
@@ -171,6 +143,142 @@ router.get("/focus/data", authMiddleware, async (req, res) => {
     } catch (error) {
         console.error("GET /focus/data Error:", error);
         sendError(res, 500, "Failed to load focus data", {
+            code: CODES.INTERNAL_ERROR,
+            details: error.message,
+        });
+    }
+});
+
+/**
+ * GET /api/v1/focus/unfinished-yesterday
+ * Tasks planned for yesterday (Cairo) that are not completed and user is assignee or creator.
+ * Used by Focus page banner for rollover.
+ */
+router.get("/focus/unfinished-yesterday", authMiddleware, async (req, res) => {
+    try {
+        const userId = Number(req.user?.id);
+        if (!userId) {
+            return sendError(res, 401, "Unauthorized", { code: CODES.UNAUTHORIZED });
+        }
+        const yesterdayCairo = getCairoDateStringDaysAgo(1);
+        const { start: yestStart, end: yestEnd } = getCairoDayRangeUtc(yesterdayCairo);
+
+        const tasks = await prisma.task.findMany({
+            where: {
+                plannedDate: { gte: yestStart, lte: yestEnd },
+                completedAt: null,
+                AND: [
+                    { OR: [ { taskStatusId: null }, { taskStatus: { isFinal: false } } ] },
+                    { OR: [ { assignees: { some: { id: userId } } }, { createdById: userId } ] },
+                ],
+            },
+            select: {
+                id: true,
+                title: true,
+                projectId: true,
+                status: true,
+                taskStatusId: true,
+                project: { select: { id: true, name: true } },
+            },
+            orderBy: { updatedAt: "desc" },
+        });
+
+        sendSuccess(res, { tasks });
+    } catch (error) {
+        console.error("GET /focus/unfinished-yesterday Error:", error);
+        sendError(res, 500, "Failed to load unfinished yesterday tasks", {
+            code: CODES.INTERNAL_ERROR,
+            details: error.message,
+        });
+    }
+});
+
+/**
+ * POST /api/v1/focus/rollover
+ * Roll current user's unfinished-yesterday tasks to today (Cairo). Sets plannedDate to today and increments rolloverCount.
+ */
+router.post("/focus/rollover", authMiddleware, async (req, res) => {
+    try {
+        const userId = Number(req.user?.id);
+        if (!userId) {
+            return sendError(res, 401, "Unauthorized", { code: CODES.UNAUTHORIZED });
+        }
+        const yesterdayCairo = getCairoDateStringDaysAgo(1);
+        const { start: yestStart, end: yestEnd } = getCairoDayRangeUtc(yesterdayCairo);
+        const todayCairo = getCairoDateString();
+        const { start: todayStart } = getCairoDayRangeUtc(todayCairo);
+
+        const toRoll = await prisma.task.findMany({
+            where: {
+                plannedDate: { gte: yestStart, lte: yestEnd },
+                completedAt: null,
+                AND: [
+                    { OR: [ { taskStatusId: null }, { taskStatus: { isFinal: false } } ] },
+                    { OR: [ { assignees: { some: { id: userId } } }, { createdById: userId } ] },
+                ],
+            },
+            select: { id: true, assignees: { select: { id: true } } },
+        });
+
+        if (toRoll.length === 0) {
+            return sendSuccess(res, { rolledCount: 0, tasks: [] });
+        }
+
+        const taskIds = toRoll.map((t) => t.id);
+        await prisma.task.updateMany({
+            where: { id: { in: taskIds } },
+            data: {
+                plannedDate: todayStart,
+                rolloverCount: { increment: 1 },
+            },
+        });
+
+        await logActivity({
+            actionType: "focus_rollover",
+            actionCategory: "today_task",
+            entityType: "task",
+            entityId: taskIds[0],
+            performedById: userId,
+            actionSummary: `Rolled ${toRoll.length} unfinished focus task(s) to today`,
+            actionDetails: {
+                taskIds,
+                rolledCount: toRoll.length,
+                fromDate: yesterdayCairo,
+                toDate: todayCairo,
+                timezone: CAIRO_TIMEZONE,
+            },
+        }, req);
+
+        const assigneeIds = [...new Set(toRoll.flatMap((t) => (t.assignees || []).map((a) => a.id)))].filter(Boolean);
+        if (assigneeIds.length > 0) {
+            await notifyUsers(
+                assigneeIds.map((id) => ({
+                    userId: id,
+                    title: "Focus tasks rolled to today",
+                    message: `${toRoll.length} task(s) from yesterday were rolled to today's focus.`,
+                    type: "focus_rollover",
+                    linkUrl: "/dashboard/focus",
+                }))
+            );
+        }
+
+        const rolled = await prisma.task.findMany({
+            where: { id: { in: taskIds } },
+            select: {
+                id: true,
+                title: true,
+                projectId: true,
+                project: { select: { name: true } },
+                status: true,
+                plannedDate: true,
+                rolloverCount: true,
+            },
+        });
+
+        sendSuccess(res, { rolledCount: rolled.length, tasks: rolled });
+    } catch (error) {
+        console.error("POST /focus/rollover Error:", error);
+        sendError(res, 500, "Failed to roll over focus tasks", {
             code: CODES.INTERNAL_ERROR,
             details: error.message,
         });

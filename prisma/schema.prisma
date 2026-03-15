@@ -153,6 +153,7 @@ model Task {
   assignees      User[]           @relation("TaskAssignees")
   startedAt      DateTime?        @map("started_at")
   completedAt    DateTime?        @map("completed_at")
+  rolloverCount  Int              @default(0) @map("rollover_count")
 
   @@index([taskStatusId])
   @@index([projectId])  // For finding tasks by project

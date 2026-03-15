@@ -1,14 +1,22 @@
 "use strict";
 
 const express = require("express");
+const multer = require("multer");
 const router = express.Router();
 const { authMiddleware } = require("../middleware/auth");
 const tasksController = require("../controllers/tasksController");
+const attachmentsController = require("../controllers/attachmentsController");
+
+const attachmentUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
 
 router.use(authMiddleware);
 
 router.get("/tasks", tasksController.list);
 router.get("/tasks/:id/dependency-candidates", tasksController.getDependencyCandidates);
+router.post("/tasks/:id/attachments", attachmentUpload.single("file"), attachmentsController.uploadForTask);
 router.post("/tasks/:id/dependencies", tasksController.addDependency);
 router.delete("/tasks/:id/dependencies/:dependsOnTaskId", tasksController.removeDependency);
 router.post("/tasks/:id/subtasks", tasksController.createSubtask);

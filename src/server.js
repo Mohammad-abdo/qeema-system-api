@@ -31,6 +31,7 @@ const authRouter = require("./routes/auth");
 const systemSettingsRouter = require("./routes/system-settings");
 const rbacRouter = require("./routes/rbac");
 const attachmentsRouter = require("./routes/attachments");
+const searchRouter = require("./routes/search");
 const reportsRouter = require("./routes/reports");
 
 const app = express();
@@ -110,6 +111,7 @@ app.use("/api/v1", assignmentRouter);
 app.use("/api/v1", systemSettingsRouter);
 app.use("/api/v1", rbacRouter);
 app.use("/api/v1", attachmentsRouter);
+app.use("/api/v1", searchRouter);
 app.use("/api/v1/reports", reportsRouter);
 
 if (process.env.SENTRY_DSN && Sentry) {
@@ -130,6 +132,21 @@ app.use((err, req, res, next) => {
 
 const server = app.listen(PORT, () => {
   logger.info("Backend listening", { port: PORT });
+  // Optional: daily at 00:00 (server local time) notify users with unfinished yesterday focus tasks
+  try {
+    const cron = require("node-cron");
+    const { runUnfinishedYesterdayNotifications } = require("./jobs/focusRolloverReminder");
+    cron.schedule("0 0 * * *", async () => {
+      try {
+        const count = await runUnfinishedYesterdayNotifications();
+        if (count > 0) logger.info("Focus rollover reminders sent", { count });
+      } catch (e) {
+        logger.error("Focus rollover reminder job failed", { error: e.message });
+      }
+    });
+  } catch (e) {
+    logger.warn("Focus rollover reminder cron not started", { error: e.message });
+  }
 });
 server.timeout = REQUEST_TIMEOUT_MS;
 server.keepAliveTimeout = REQUEST_TIMEOUT_MS + 1000;

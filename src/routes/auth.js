@@ -6,6 +6,8 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { sendSuccess, sendError, CODES } = require("../lib/errorResponse");
 const { logActivity } = require("../lib/activityLogger");
+const { authMiddleware } = require("../middleware/auth");
+const { prisma: sharedPrisma } = require("../lib/prisma");
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -249,6 +251,61 @@ router.get("/auth/me", async (req, res) => {
         console.error("Auth me error:", error);
         sendError(res, 500, "Failed to get user", {
             code: CODES.INTERNAL_ERROR,
+        });
+    }
+});
+
+/**
+ * POST /api/v1/auth/change-password
+ * Change password for the authenticated user (self-service). Requires Bearer token.
+ */
+router.post("/auth/change-password", authMiddleware, async (req, res) => {
+    try {
+        const userId = Number(req.user?.id);
+        if (!userId || !Number.isFinite(userId)) {
+            return sendError(res, 401, "Unauthorized", { code: CODES.UNAUTHORIZED, requestId: req.id });
+        }
+        const { currentPassword, newPassword } = req.body || {};
+        const newPassTrimmed = String(newPassword ?? "").trim();
+        if (!newPassTrimmed || newPassTrimmed.length < 6) {
+            return sendError(res, 400, "New password must be at least 6 characters", {
+                code: CODES.VALIDATION_ERROR,
+                requestId: req.id,
+            });
+        }
+        const user = await sharedPrisma.user.findUnique({
+            where: { id: userId },
+            select: { id: true, username: true, passwordHash: true, isActive: true },
+        });
+        if (!user) {
+            return sendError(res, 401, "User not found", { code: CODES.UNAUTHORIZED, requestId: req.id });
+        }
+        if (!user.isActive) {
+            return sendError(res, 403, "Account is inactive", { code: CODES.FORBIDDEN, requestId: req.id });
+        }
+        const validCurrent = await bcrypt.compare(String(currentPassword || "").trim(), user.passwordHash);
+        if (!validCurrent) {
+            return sendError(res, 401, "Current password is incorrect", { code: CODES.UNAUTHORIZED, requestId: req.id });
+        }
+        const passwordHash = await bcrypt.hash(newPassTrimmed, 10);
+        await sharedPrisma.user.update({
+            where: { id: userId },
+            data: { passwordHash },
+        });
+        await logActivity({
+            actionType: "password_changed",
+            actionCategory: "auth",
+            entityType: "user",
+            entityId: user.id,
+            performedById: user.id,
+            actionSummary: `Password changed for user ${user.username}`,
+        }, req);
+        return sendSuccess(res, { message: "Password updated successfully" });
+    } catch (err) {
+        console.error("Change password error:", err);
+        sendError(res, 500, "Failed to change password", {
+            code: CODES.INTERNAL_ERROR,
+            requestId: req.id,
         });
     }
 });

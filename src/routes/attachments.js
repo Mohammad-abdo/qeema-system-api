@@ -8,5 +8,6 @@ const attachmentsController = require("../controllers/attachmentsController");
 router.use(authMiddleware);
 
 router.get("/attachments/:id", attachmentsController.download);
+router.delete("/attachments/:id", attachmentsController.remove);
 
 module.exports = router;

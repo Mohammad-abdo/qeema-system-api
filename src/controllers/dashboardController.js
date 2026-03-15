@@ -50,6 +50,7 @@ async function summary(req, res) {
       totalTasks,
       myTasksCount,
       todaysTasksCount,
+      todaysTasksTotalCount,
       completedTodayCount,
       recentActivities,
       projectStatusCountsRows,
@@ -81,6 +82,15 @@ async function summary(req, res) {
           OR: [
             { taskStatus: { isFinal: false } },
             { status: { not: "completed" }, taskStatusId: null },
+          ],
+        },
+      }),
+      prisma.task.count({
+        where: {
+          ...tasksWhereBase,
+          OR: [
+            { dueDate: { gte: todayStart, lte: todayEnd } },
+            { plannedDate: { gte: todayStart, lte: todayEnd } },
           ],
         },
       }),
@@ -195,6 +205,7 @@ async function summary(req, res) {
         totalTasks,
         myTasks: myTasksCount,
         todaysTasks: todaysTasksCount,
+        todaysTasksTotal: todaysTasksTotalCount,
         completedToday: completedTodayCount,
         blockedTasks,
         overdueTasks,

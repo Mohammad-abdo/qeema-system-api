@@ -14,6 +14,7 @@
     "script:init-rbac": "node scripts/initialize-rbac.js",
     "script:list-users": "node scripts/list-users.js",
     "script:verify-db": "node scripts/verify-db-counts.js",
+    "script:create-db": "node scripts/create-database.js",
     "seed": "node prisma/seed.js",
     "script:check-permissions": "node scripts/check-permissions.js"
   },
@@ -30,7 +31,8 @@
     "express-rate-limit": "^8.2.1",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
-    "multer": "^2.0.2"
+    "multer": "^2.0.2",
+    "node-cron": "^3.0.3"
   },
   "devDependencies": {
     "prisma": "^5.10.2",

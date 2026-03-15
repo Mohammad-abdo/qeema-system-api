@@ -316,7 +316,7 @@ async function getTeamTasks(req, res) {
           dueDate: true,
           projectId: true,
           project: { select: { id: true, name: true } },
-          assignees: { select: { id: true, username: true, email: true } },
+          assignees: { where: { isActive: true }, select: { id: true, username: true, email: true } },
           taskStatus: { select: { id: true, name: true, isFinal: true } },
         },
         orderBy: { dueDate: "asc" },

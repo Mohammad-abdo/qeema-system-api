@@ -411,13 +411,13 @@ async function main() {
 
     // 9) مستخدم الأدمن + ربطه بدور admin (نطاق عام)
     console.log('👨‍💼 إنشاء مستخدم الأدمن...');
-    const passwordHash = await bcrypt.hash('password123', 10);
+    const passwordHash = await bcrypt.hash('qeematech123', 10);
     let adminUser = await prisma.user.findUnique({ where: { username: 'admin' } });
     if (!adminUser) {
         adminUser = await prisma.user.create({
             data: {
                 username: 'admin',
-                email: 'admin@example.com',
+                email: 'aadmin@qeematech.net',
                 passwordHash,
                 role: 'admin',
             },

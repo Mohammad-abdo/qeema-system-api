@@ -411,6 +411,7 @@ async function main() {
     ]);
     console.log('✅ Created ' + labels.length + ' labels');
 
+<<<<<<< HEAD
     // 9) Admin System Account Creation (Admin Bootstrap) if enabled
     console.log('👨‍💼 Setting up admin user (Admin Bootstrap)...');
 
@@ -454,6 +455,17 @@ async function main() {
             where: { username: adminUsername },
             update: {
                 email: adminEmail,
+=======
+    // 9) مستخدم الأدمن + ربطه بدور admin (نطاق عام)
+    console.log('👨‍💼 إنشاء مستخدم الأدمن...');
+    const passwordHash = await bcrypt.hash('qeematech123', 10);
+    let adminUser = await prisma.user.findUnique({ where: { username: 'admin' } });
+    if (!adminUser) {
+        adminUser = await prisma.user.create({
+            data: {
+                username: 'admin',
+                email: 'aadmin@qeematech.net',
+>>>>>>> 7af0ea138612e4a8e57e15217f958a930c007e66
                 passwordHash,
                 role: 'admin',
             },

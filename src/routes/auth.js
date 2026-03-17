@@ -10,9 +10,9 @@ const { authMiddleware } = require("../middleware/auth");
 const { prisma: sharedPrisma } = require("../lib/prisma");
 
 const router = express.Router();
-const prisma = new PrismaClient();
+const prisma = sharedPrisma;
 
-const JWT_SECRET = process.env.NEXTAUTH_SECRET || "your-secret-key";
+const JWT_SECRET = process.env.NEXTAUTH_SECRET;
 const JWT_EXPIRES_IN = "24h";
 
 /**
@@ -266,28 +266,41 @@ router.post("/auth/change-password", authMiddleware, async (req, res) => {
             return sendError(res, 401, "Unauthorized", { code: CODES.UNAUTHORIZED, requestId: req.id });
         }
         const { currentPassword, newPassword } = req.body || {};
-        const newPassTrimmed = String(newPassword ?? "").trim();
-        if (!newPassTrimmed || newPassTrimmed.length < 6) {
+        
+        if (!currentPassword) {
+            return sendError(res, 400, "Current password is required", {
+                code: CODES.VALIDATION_ERROR,
+                requestId: req.id,
+            });
+        }
+
+        const newPassString = String(newPassword ?? "");
+        if (!newPassString || newPassString.length < 6) {
             return sendError(res, 400, "New password must be at least 6 characters", {
                 code: CODES.VALIDATION_ERROR,
                 requestId: req.id,
             });
         }
+        
         const user = await sharedPrisma.user.findUnique({
             where: { id: userId },
             select: { id: true, username: true, passwordHash: true, isActive: true },
         });
+        
         if (!user) {
             return sendError(res, 401, "User not found", { code: CODES.UNAUTHORIZED, requestId: req.id });
         }
         if (!user.isActive) {
             return sendError(res, 403, "Account is inactive", { code: CODES.FORBIDDEN, requestId: req.id });
         }
-        const validCurrent = await bcrypt.compare(String(currentPassword || "").trim(), user.passwordHash);
+        
+        // Do NOT trim passwords, as login/register do not trim spaces!
+        const validCurrent = await bcrypt.compare(String(currentPassword), user.passwordHash);
         if (!validCurrent) {
             return sendError(res, 401, "Current password is incorrect", { code: CODES.UNAUTHORIZED, requestId: req.id });
         }
-        const passwordHash = await bcrypt.hash(newPassTrimmed, 10);
+
+        const passwordHash = await bcrypt.hash(newPassString, 10);
         await sharedPrisma.user.update({
             where: { id: userId },
             data: { passwordHash },

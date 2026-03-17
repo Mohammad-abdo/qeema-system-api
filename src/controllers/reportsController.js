@@ -381,16 +381,25 @@ async function todaysFocusReport(req, res) {
     if (!canViewReport) return sendError(res, 403, "Permission denied: report.view required", { code: CODES.FORBIDDEN, requestId: req.id });
 
     const CAIRO_TIMEZONE = "Africa/Cairo";
-    const CAIRO_UTC_OFFSET_HOURS = 2; // Fixed Egypt offset
+    const { fromZonedTime, getTimezoneOffset } = require("date-fns-tz");
     
     function getCairoDateString(date = new Date()) {
         return formatInTimeZone(date, CAIRO_TIMEZONE, "yyyy-MM-dd");
     }
     
     function getCairoDayRangeUtc(dateStr) {
+        if (fromZonedTime) {
+            const start = fromZonedTime(`${dateStr}T00:00:00`, CAIRO_TIMEZONE);
+            const end = fromZonedTime(`${dateStr}T23:59:59.999`, CAIRO_TIMEZONE);
+            return { start, end };
+        }
         const [y, m, d] = dateStr.split("-").map(Number);
-        const start = new Date(Date.UTC(y, m - 1, d, -CAIRO_UTC_OFFSET_HOURS, 0, 0, 0));
-        const end = new Date(Date.UTC(y, m - 1, d, 24 - CAIRO_UTC_OFFSET_HOURS - 1, 59, 59, 999));
+        const approxMidnightUtc = new Date(Date.UTC(y, m - 1, d, 0, 0, 0));
+        const offsetMs = getTimezoneOffset(CAIRO_TIMEZONE, approxMidnightUtc);
+        const offsetHours = offsetMs / (1000 * 60 * 60);
+
+        const start = new Date(Date.UTC(y, m - 1, d, -offsetHours, 0, 0, 0));
+        const end = new Date(Date.UTC(y, m - 1, d, 24 - offsetHours - 1, 59, 59, 999));
         return { start, end };
     }
 

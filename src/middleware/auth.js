@@ -3,8 +3,8 @@
 const jwt = require("jsonwebtoken");
 const { sendError, CODES } = require("../lib/errorResponse");
 
-// Must match auth route (JWT_SECRET = NEXTAUTH_SECRET || "your-secret-key")
-const JWT_SECRET = process.env.NEXTAUTH_SECRET || "your-secret-key";
+// Must match auth route
+const JWT_SECRET = process.env.NEXTAUTH_SECRET;
 
 function authMiddleware(req, res, next) {
   const requestId = req.id || undefined;

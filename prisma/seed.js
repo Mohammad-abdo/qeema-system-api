@@ -1,25 +1,27 @@
 /**
- * Prisma Seed - كل عمليات الـ seed في مكان واحد (JavaScript فقط، لا TypeScript)
+ * Prisma Seed - All seed operations in one place (JavaScript only)
  *
- * التشغيل:
+ * Usage:
  *   npm run prisma:seed
- * أو
+ * or
  *   npx prisma db seed
  *
- * ينشئ: أنواع المشاريع، حالات المشاريع/المهام، الصلاحيات الكاملة (RBAC)، الأدوار،
- * ربط الصلاحيات بالأدوار، التسميات، ومستخدم الأدمن.
+ * Clears old data (optional - remove this section if you want to keep the data)
+ * Creates: Project Types, Project/Task Statuses, Full Permissions (RBAC), Roles,
+ * Role Permissions mappings, and Labels.
  *
- * بيانات دخول الأدمن بعد التشغيل:
- *   Username: admin
- *   Email: admin@example.com
- *   Password: password123
+ * To create the system admin for the first time (Bootstrap), use the following environment variables:
+ *   BOOTSTRAP_ADMIN=true
+ *   ADMIN_BOOTSTRAP_USERNAME=admin
+ *   ADMIN_BOOTSTRAP_EMAIL=admin@example.com
+ *   ADMIN_BOOTSTRAP_PASSWORD=StrongPasswordHere
  */
 
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
 const prisma = new PrismaClient();
 
-// ─── تعريفات الصلاحيات الكاملة (RBAC) ─────────────────────────────────────
+// ─── Full Permissions Definitions (RBAC) ─────────────────────────────────────
 const PERMISSIONS = {
     USER: {
         CREATE: 'user.create',
@@ -109,12 +111,12 @@ function getAllPermissions() {
     return Object.values(PERMISSIONS).flatMap((mod) => Object.values(mod));
 }
 
-// ─── الدالة الرئيسية ──────────────────────────────────────────────────────
+// ─── Main Function ──────────────────────────────────────────────────────
 async function main() {
-    console.log('🌱 بدء تشغيل seed قاعدة البيانات...\n');
+    console.log('🌱 Starting database seed...\n');
 
-    // 1) مسح البيانات القديمة (اختياري – احذف هذا القسم لو أردت الإبقاء على البيانات)
-    console.log('🗑️  مسح البيانات القديمة...');
+    // 1) Clear old data (optional - remove this section if you want to keep the data)
+    console.log('🗑️  Clearing old data...');
     await prisma.taskLabel.deleteMany();
     await prisma.label.deleteMany();
     await prisma.rolePermission.deleteMany();
@@ -125,8 +127,8 @@ async function main() {
     await prisma.projectStatus.deleteMany();
     await prisma.projectType.deleteMany();
 
-    // 2) أنواع المشاريع
-    console.log('📁 إنشاء أنواع المشاريع...');
+    // 2) Project Types
+    console.log('📁 Creating project types...');
     const projectTypes = await Promise.all([
         prisma.projectType.create({
             data: {
@@ -169,10 +171,10 @@ async function main() {
             },
         }),
     ]);
-    console.log('✅ تم إنشاء ' + projectTypes.length + ' أنواع مشاريع');
+    console.log('✅ Created ' + projectTypes.length + ' project types');
 
-    // 3) حالات المشاريع
-    console.log('📊 إنشاء حالات المشاريع...');
+    // 3) Project Statuses
+    console.log('📊 Creating project statuses...');
     const projectStatuses = await Promise.all([
         prisma.projectStatus.create({
             data: {
@@ -241,10 +243,10 @@ async function main() {
             },
         }),
     ]);
-    console.log('✅ تم إنشاء ' + projectStatuses.length + ' حالات مشاريع');
+    console.log('✅ Created ' + projectStatuses.length + ' project statuses');
 
-    // 4) حالات المهام
-    console.log('✅ إنشاء حالات المهام...');
+    // 4) Task Statuses
+    console.log('✅ Creating task statuses...');
     const taskStatuses = await Promise.all([
         prisma.taskStatus.create({
             data: {
@@ -313,10 +315,10 @@ async function main() {
             },
         }),
     ]);
-    console.log('✅ تم إنشاء ' + taskStatuses.length + ' حالات مهام');
+    console.log('✅ Created ' + taskStatuses.length + ' task statuses');
 
-    // 5) الصلاحيات الكاملة (من PERMISSIONS أعلاه)
-    console.log('🔐 إنشاء الصلاحيات (RBAC)...');
+    // 5) Full Permissions (from PERMISSIONS above)
+    console.log('🔐 Creating permissions (RBAC)...');
     const allKeys = getAllPermissions();
     const permissions = [];
     for (const key of allKeys) {
@@ -335,10 +337,10 @@ async function main() {
         });
         permissions.push(p);
     }
-    console.log('✅ تم إنشاء ' + permissions.length + ' صلاحية');
+    console.log('✅ Created ' + permissions.length + ' permissions');
 
-    // 6) الأدوار (دور admin للنظام + أدوار أخرى)
-    console.log('👥 إنشاء الأدوار...');
+    // 6) Roles (System admin role + other roles)
+    console.log('👥 Creating roles...');
     const adminRole = await prisma.role.create({
         data: {
             name: 'admin',
@@ -374,19 +376,19 @@ async function main() {
             isSystemRole: true,
         },
     });
-    console.log('✅ تم إنشاء الأدوار (admin, project_manager, team_lead, developer, viewer)');
+    console.log('✅ Created roles (admin, project_manager, team_lead, developer, viewer)');
 
-    // 7) ربط كل الصلاحيات بدور admin
-    console.log('🔗 ربط الصلاحيات بدور admin...');
+    // 7) Map all permissions to admin role
+    console.log('🔗 Mapping permissions to admin role...');
     for (const perm of permissions) {
         await prisma.rolePermission.create({
             data: { roleId: adminRole.id, permissionId: perm.id },
         });
     }
-    console.log('✅ تم ربط ' + permissions.length + ' صلاحية بدور admin');
+    console.log('✅ Mapped ' + permissions.length + ' permissions to admin role');
 
-    // 8) التسميات (Labels)
-    console.log('🏷️  إنشاء التسميات...');
+    // 8) Labels
+    console.log('🏷️  Creating labels...');
     const labels = await Promise.all([
         prisma.label.create({
             data: { name: 'Bug', color: '#ef4444', description: 'Bug fixes and issues' },
@@ -407,65 +409,102 @@ async function main() {
             data: { name: 'Urgent', color: '#dc2626', description: 'Urgent tasks' },
         }),
     ]);
-    console.log('✅ تم إنشاء ' + labels.length + ' تسمية');
+    console.log('✅ Created ' + labels.length + ' labels');
 
-    // 9) مستخدم الأدمن + ربطه بدور admin (نطاق عام)
-    console.log('👨‍💼 إنشاء مستخدم الأدمن...');
-    const passwordHash = await bcrypt.hash('password123', 10);
-    let adminUser = await prisma.user.findUnique({ where: { username: 'admin' } });
-    if (!adminUser) {
-        adminUser = await prisma.user.create({
-            data: {
-                username: 'admin',
-                email: 'admin@example.com',
+    // 9) Admin System Account Creation (Admin Bootstrap) if enabled
+    console.log('👨‍💼 Setting up admin user (Admin Bootstrap)...');
+
+    if (process.env.BOOTSTRAP_ADMIN === 'true') {
+        const adminUsername = process.env.ADMIN_BOOTSTRAP_USERNAME?.trim();
+        const adminEmail = process.env.ADMIN_BOOTSTRAP_EMAIL?.trim();
+        const adminPassword = process.env.ADMIN_BOOTSTRAP_PASSWORD;
+
+        if (!adminUsername || !adminEmail || !adminPassword) {
+            console.error('❌ Bootstrap failed: Please provide ADMIN_BOOTSTRAP_USERNAME, ADMIN_BOOTSTRAP_EMAIL, and ADMIN_BOOTSTRAP_PASSWORD');
+            process.exit(1);
+        }
+
+        // Strength validation
+        if (adminPassword.length < 12) {
+            console.error('❌ Bootstrap failed: Password must be at least 12 characters long');
+            process.exit(1);
+        }
+        if (adminPassword === adminUsername || adminPassword === adminEmail) {
+            console.error('❌ Bootstrap failed: Password cannot be identical to username or email');
+            process.exit(1);
+        }
+        const weakPatterns = ['password', 'admin', '123456', 'qwerty'];
+        const passLower = adminPassword.toLowerCase();
+        if (weakPatterns.some(pattern => passLower.includes(pattern))) {
+            console.error('❌ Bootstrap failed: Password is too weak and contains common patterns');
+            process.exit(1);
+        }
+
+        // Hash securely
+        const passwordHash = await bcrypt.hash(adminPassword, 10);
+
+        const adminData = {
+            username: adminUsername,
+            email: adminEmail,
+            passwordHash,
+            role: 'admin',
+        };
+
+        const adminUser = await prisma.user.upsert({
+            where: { username: adminUsername },
+            update: {
+                email: adminEmail,
                 passwordHash,
                 role: 'admin',
             },
+            create: adminData,
         });
-        console.log('✅ تم إنشاء مستخدم الأدمن');
+        console.log(`✅ Admin account setup successful: ${adminUsername}`);
+
+        const existingLink = await prisma.userRole.findFirst({
+            where: { userId: adminUser.id, roleId: adminRole.id, scopeType: 'global' },
+        });
+        if (!existingLink) {
+            await prisma.userRole.create({
+                data: {
+                    userId: adminUser.id,
+                    roleId: adminRole.id,
+                    scopeType: 'global',
+                    scopeId: null,
+                },
+            });
+            console.log(`✅ Admin user mapped to admin role`);
+        } else {
+            console.log(`✅ Admin user was already mapped to admin role`);
+        }
     } else {
-        await prisma.user.update({
-            where: { id: adminUser.id },
-            data: { passwordHash, role: 'admin' },
-        });
-        console.log('✅ تحديث كلمة مرور ودور مستخدم الأدمن الموجود');
-    }
-    const existingLink = await prisma.userRole.findFirst({
-        where: { userId: adminUser.id, roleId: adminRole.id, scopeType: 'global' },
-    });
-    if (!existingLink) {
-        await prisma.userRole.create({
-            data: {
-                userId: adminUser.id,
-                roleId: adminRole.id,
-                scopeType: 'global',
-                scopeId: null,
-            },
-        });
-        console.log('✅ ربط مستخدم الأدمن بدور admin');
-    } else {
-        console.log('✅ مستخدم الأدمن مربوط مسبقاً بدور admin');
+        if (process.env.NODE_ENV === 'production') {
+            console.log('ℹ️  Admin Bootstrap step skipped. To enable it, specify the required variables.');
+        } else {
+            console.log('ℹ️  Admin Bootstrap skipped (BOOTSTRAP_ADMIN !== true)');
+        }
     }
 
-    // ─── الخلاصة وبيانات الدخول ───────────────────────────────────────────
-    console.log('\n✨ انتهى تشغيل الـ seed بنجاح.\n');
-    console.log('📊 الملخص:');
-    console.log('   - ' + projectTypes.length + ' أنواع مشاريع');
-    console.log('   - ' + projectStatuses.length + ' حالات مشاريع');
-    console.log('   - ' + taskStatuses.length + ' حالات مهام');
-    console.log('   - ' + permissions.length + ' صلاحية');
-    console.log('   - 5 أدوار (admin, project_manager, team_lead, developer, viewer)');
-    console.log('   - ' + labels.length + ' تسمية');
-    console.log('   - مستخدم أدمن واحد\n');
-    console.log('📝 بيانات دخول الأدمن:');
-    console.log('   Username: admin');
-    console.log('   Email: admin@example.com');
-    console.log('   Password: password123\n');
+    // ─── Summary and Report ───────────────────────────────────────────
+    console.log('\n✨ Seed execution finished successfully.\n');
+    console.log('📊 Summary:');
+    console.log('   - ' + projectTypes.length + ' Project Types');
+    console.log('   - ' + projectStatuses.length + ' Project Statuses');
+    console.log('   - ' + taskStatuses.length + ' Task Statuses');
+    console.log('   - ' + permissions.length + ' Permissions');
+    console.log('   - 5 Roles (admin, project_manager, team_lead, developer, viewer)');
+    console.log('   - ' + labels.length + ' Labels');
+    if (process.env.BOOTSTRAP_ADMIN === 'true') {
+        console.log('   - Admin system setup (Admin Bootstrap) completed successfully.\n');
+        console.log('🔒 Security Reminder: Please set `BOOTSTRAP_ADMIN=false` in the future and remove the password from the variables.');
+    } else {
+        console.log('   - Admin user creation/update was not performed (disabled).\n');
+    }
 }
 
 main()
     .catch((e) => {
-        console.error('❌ خطأ أثناء الـ seed:', e);
+        console.error('❌ Error during seed:', e);
         process.exit(1);
     })
     .finally(async () => {

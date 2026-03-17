@@ -82,8 +82,22 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" },
   crossOriginEmbedderPolicy: false,
 }));
+// Ensure essential secrets are provided
+if (process.env.NODE_ENV !== "test" && !process.env.NEXTAUTH_SECRET) {
+  logger.error("FATAL: NEXTAUTH_SECRET is not set. Terminating startup.");
+  process.exit(1);
+}
+
 // Serve uploaded files (e.g. branding logo)
-app.use("/uploads", express.static(path.join(process.cwd(), "public", "uploads")));
+// Only serve safe public content directly. Block tasks/sensitive attachments.
+app.use("/uploads", (req, res, next) => {
+  // Allow branding or other genuinely public folders
+  if (req.path.startsWith("/branding/")) {
+    return next();
+  }
+  // Otherwise forbid direct access (clients should use GET /api/v1/attachments/:id)
+  return res.status(403).json({ success: false, error: "Direct access forbidden. Use /api/v1/attachments endpoint." });
+}, express.static(path.join(process.cwd(), "public", "uploads")));
 app.use(requestIdMiddleware);
 app.use(requestLogMiddleware);
 app.use(cors(corsOptions));

@@ -49,9 +49,18 @@ backend/src/
 
 ## Setup
 
-1. Copy root `.env` (or symlink) so `DATABASE_URL` and `NEXTAUTH_SECRET` are set.
-2. From repo root: `npm run backend` (or `cd apps/backend && npm install && npm run prisma:generate && npm start`).
-3. Backend listens on `PORT` (default 4000). Set `CORS_ORIGIN=http://localhost:3000` to allow the frontend.
+1. Copy root `.env.example` as `.env` and configure `DATABASE_URL` and `NEXTAUTH_SECRET`.
+2. To create the first-time **Admin Account**, add the following settings to your `.env` right before initializing your database:
+   ```env
+   BOOTSTRAP_ADMIN=true
+   ADMIN_BOOTSTRAP_USERNAME=admin
+   ADMIN_BOOTSTRAP_EMAIL=admin@example.com
+   ADMIN_BOOTSTRAP_PASSWORD=SuperStrongPassword!
+   ```
+   *(Ensure password is 12+ chars, and does not contain simple strings like `password` or `123456`).*
+3. From repo root: `npm run backend` (or `cd apps/backend && npm install && npm run prisma:generate && npm run prisma:seed && npm start`).
+4. **SECURE YOUR OPERATION**: Immediately disable `BOOTSTRAP_ADMIN=false` in your `.env` after running the seed command successfully to stop future password modifications.
+5. Backend listens on `PORT` (default `4000`). Set `CORS_ORIGIN=http://localhost:3000` to allow the frontend.
 
 ## Auth
 

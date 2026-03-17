@@ -10,9 +10,10 @@ const { formatInTimeZone } = require("date-fns-tz");
 const fs = require("fs");
 const path = require("path");
 const { authMiddleware } = require("../middleware/auth");
+const { toZonedTime, fromZonedTime, getTimezoneOffset } = require("date-fns-tz");
 
 const router = express.Router();
-const prisma = new PrismaClient();
+const { prisma } = require("../lib/prisma");
 
 const CAIRO_TIMEZONE = "Africa/Cairo";
 /** Egypt uses UTC+2 (no DST since 2015) */
@@ -36,13 +37,27 @@ function getCairoDateStringDaysAgo(days) {
 
 /**
  * Get start and end of a Cairo calendar day in UTC (for DB queries).
+ * Uses timezone-aware date-fns-tz logic to handle daylight saving time (DST).
  * @param {string} dateStr - YYYY-MM-DD in Cairo
  * @returns {{ start: Date, end: Date }}
  */
 function getCairoDayRangeUtc(dateStr) {
+    if (fromZonedTime) {
+        const start = fromZonedTime(`${dateStr}T00:00:00`, CAIRO_TIMEZONE);
+        const end = fromZonedTime(`${dateStr}T23:59:59.999`, CAIRO_TIMEZONE);
+        return { start, end };
+    }
+    
+    // Fallback if fromZonedTime is not available in this version of date-fns-tz
     const [y, m, d] = dateStr.split("-").map(Number);
-    const start = new Date(Date.UTC(y, m - 1, d, -CAIRO_UTC_OFFSET_HOURS, 0, 0, 0));
-    const end = new Date(Date.UTC(y, m - 1, d, 24 - CAIRO_UTC_OFFSET_HOURS - 1, 59, 59, 999));
+    // Approximate midnight UTC for the target date
+    const approxMidnightUtc = new Date(Date.UTC(y, m - 1, d, 0, 0, 0));
+    // Determine the active offset for that day in Cairo in milliseconds
+    const offsetMs = getTimezoneOffset(CAIRO_TIMEZONE, approxMidnightUtc);
+    const offsetHours = offsetMs / (1000 * 60 * 60);
+
+    const start = new Date(Date.UTC(y, m - 1, d, -offsetHours, 0, 0, 0));
+    const end = new Date(Date.UTC(y, m - 1, d, 24 - offsetHours - 1, 59, 59, 999));
     return { start, end };
 }
 

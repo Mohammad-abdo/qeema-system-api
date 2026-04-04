@@ -10,9 +10,19 @@ const { formatInTimeZone } = require("date-fns-tz");
 const fs = require("fs");
 const path = require("path");
 const { authMiddleware } = require("../middleware/auth");
+const { hasPermissionWithoutRoleBypass, isAdmin } = require("../lib/rbac");
 const { toZonedTime, fromZonedTime, getTimezoneOffset } = require("date-fns-tz");
 
 const router = express.Router();
+
+/** Allow clear-all/auto-reset only for users with today_task.assign or admin role (RBAC). */
+async function canManageFocusReset(userId) {
+    if (!userId) return false;
+    const id = Number(userId);
+    const hasPerm = await hasPermissionWithoutRoleBypass(id, "today_task.assign");
+    if (hasPerm) return true;
+    return isAdmin(id);
+}
 const { prisma } = require("../lib/prisma");
 
 const CAIRO_TIMEZONE = "Africa/Cairo";
@@ -349,9 +359,9 @@ router.post("/focus/clear-my", authMiddleware, async (req, res) => {
 
 /**
  * GET /api/v1/focus/should-reset
- * Check if we need to reset today's focus
+ * Check if we need to reset today's focus (authenticated only).
  */
-router.get("/focus/should-reset", async (req, res) => {
+router.get("/focus/should-reset", authMiddleware, async (req, res) => {
     try {
         const todayCairo = getCairoDateString();
         const lastReset = getLastResetDate();
@@ -373,10 +383,15 @@ router.get("/focus/should-reset", async (req, res) => {
 
 /**
  * POST /api/v1/focus/clear-all
- * Clear all users' today's focus tasks
+ * Clear all users' today's focus tasks. Requires auth and today_task.assign or admin.
  */
-router.post("/focus/clear-all", async (req, res) => {
+router.post("/focus/clear-all", authMiddleware, async (req, res) => {
     try {
+        const userId = Number(req.user?.id);
+        const allowed = await canManageFocusReset(userId);
+        if (!allowed) {
+            return sendError(res, 403, "Permission denied", { code: CODES.FORBIDDEN, requestId: req.id });
+        }
         const { start: todayStart, end: todayEnd } = getCairoDayRangeUtc(getCairoDateString());
 
         // Find all tasks scheduled for today (Cairo) with assignees for notifications
@@ -448,10 +463,15 @@ router.post("/focus/clear-all", async (req, res) => {
 
 /**
  * POST /api/v1/focus/auto-reset
- * Automatically check and reset if needed
+ * Automatically check and reset if needed. Requires auth and today_task.assign or admin.
  */
-router.post("/focus/auto-reset", async (req, res) => {
+router.post("/focus/auto-reset", authMiddleware, async (req, res) => {
     try {
+        const userId = Number(req.user?.id);
+        const allowed = await canManageFocusReset(userId);
+        if (!allowed) {
+            return sendError(res, 403, "Permission denied", { code: CODES.FORBIDDEN, requestId: req.id });
+        }
         const todayCairo = getCairoDateString();
         const lastReset = getLastResetDate();
         const needsReset = !lastReset || lastReset !== todayCairo;

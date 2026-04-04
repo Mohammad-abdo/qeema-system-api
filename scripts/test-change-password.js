@@ -1,7 +1,7 @@
-const ADMIN_USER = "admin";
-const OLD_PASS = "SuperStrongP@ssw0rd!123@@";
-const NEW_PASS = "SuperStrongN3wP@ss!456##";
-const apiUrl = 'http://localhost:4000/api/v1';
+const apiUrl = process.env.API_URL || "http://localhost:4000/api/v1";
+const ADMIN_USER = process.env.CHANGEPASS_USER || "admin";
+const OLD_PASS = process.env.CHANGEPASS_OLD || "SuperStrongP@ssw0rd!123@@";
+const NEW_PASS = process.env.CHANGEPASS_NEW || "SuperStrongN3wP@ss!456##";
 
 async function performLogin(username, password) {
   const res = await fetch(`${apiUrl}/auth/login`, {

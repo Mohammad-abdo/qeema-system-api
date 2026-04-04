@@ -9,12 +9,13 @@ const { startOfDay, endOfDay } = require("date-fns");
 
 async function canAccessAssignment(userId) {
   if (!userId) return false;
+  const hasPermission = await hasPermissionWithoutRoleBypass(Number(userId), "today_task.assign");
+  if (hasPermission) return true;
   const role = await prisma.user.findUnique({
     where: { id: Number(userId) },
     select: { role: true },
   }).then((u) => u?.role);
-  if (role === "admin" || role === "team_lead") return true;
-  return hasPermissionWithoutRoleBypass(Number(userId), "task.assign");
+  return role === "admin" || role === "team_lead";
 }
 
 async function getUsers(req, res) {

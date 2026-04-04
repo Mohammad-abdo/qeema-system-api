@@ -3,11 +3,14 @@
 const jwt = require("jsonwebtoken");
 const { sendError, CODES } = require("../lib/errorResponse");
 
-// Must match auth route
+// Must match auth route. No fallback; server exits at startup if missing in non-test.
 const JWT_SECRET = process.env.NEXTAUTH_SECRET;
 
 function authMiddleware(req, res, next) {
   const requestId = req.id || undefined;
+  if (!JWT_SECRET) {
+    return sendError(res, 503, "Server misconfiguration", { code: "SERVER_ERROR", requestId });
+  }
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return sendError(res, 401, "Unauthorized", { code: CODES.UNAUTHORIZED, requestId });

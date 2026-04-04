@@ -8,10 +8,12 @@ const { sendSuccess, sendError, CODES } = require("../lib/errorResponse");
 const { logActivity } = require("../lib/activityLogger");
 const { authMiddleware } = require("../middleware/auth");
 const { prisma: sharedPrisma } = require("../lib/prisma");
+const { getPermissionsList } = require("../lib/rbac");
 
 const router = express.Router();
 const prisma = sharedPrisma;
 
+// No fallback; server exits at startup if NEXTAUTH_SECRET missing in non-test.
 const JWT_SECRET = process.env.NEXTAUTH_SECRET;
 const JWT_EXPIRES_IN = "24h";
 
@@ -150,6 +152,9 @@ router.post("/auth/login", async (req, res) => {
             });
         }
 
+        if (!JWT_SECRET) {
+            return sendError(res, 503, "Server misconfiguration", { code: CODES.INTERNAL_ERROR, requestId: req.id });
+        }
         // Generate JWT token
         const token = jwt.sign(
             {
@@ -173,6 +178,8 @@ router.post("/auth/login", async (req, res) => {
             actionSummary: `User ${username} logged in`,
         }, req);
 
+        const permissions = await getPermissionsList(user.id);
+
         sendSuccess(res, {
             message: "Login successful",
             token,
@@ -181,6 +188,7 @@ router.post("/auth/login", async (req, res) => {
                 username: user.username,
                 email: user.email,
                 role: user.role,
+                permissions,
             },
         });
     } catch (error) {
@@ -235,7 +243,8 @@ router.get("/auth/me", async (req, res) => {
             });
         }
 
-        sendSuccess(res, { user });
+        const permissions = await getPermissionsList(user.id);
+        sendSuccess(res, { user: { ...user, permissions } });
     } catch (error) {
         if (error.name === "JsonWebTokenError") {
             return sendError(res, 401, "Invalid token", {

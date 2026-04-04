@@ -1,7 +1,7 @@
 "use strict";
 
 const { prisma } = require("../lib/prisma");
-const { hasPermissionWithoutRoleBypass } = require("../lib/rbac");
+const { hasPermissionWithoutRoleBypass, isAdmin } = require("../lib/rbac");
 const { sendError, CODES } = require("../lib/errorResponse");
 
 function startOfDay(d) {
@@ -19,7 +19,6 @@ function endOfDay(d) {
 async function summary(req, res) {
   try {
     const userId = Number(req.user.id);
-    const isAdmin = req.user.role === "admin";
     const canViewAll = await hasPermissionWithoutRoleBypass(userId, "project.viewAll");
 
     const projectsWhere = canViewAll ? {} : {

@@ -1,7 +1,7 @@
 "use strict";
 
 const { prisma } = require("../lib/prisma");
-const { hasPermissionWithoutRoleBypass } = require("../lib/rbac");
+const { hasPermissionWithoutRoleBypass, isAdmin } = require("../lib/rbac");
 const { sendError, CODES } = require("../lib/errorResponse");
 const { logActivity } = require("../lib/activityLogger");
 const { notifyUsers } = require("../lib/notifyUsers");
@@ -175,10 +175,10 @@ async function list(req, res) {
     const where = buildListWhere(req.query, userId);
 
     const isTodayFocus = req.query.filter === "today_focus";
+    const userIsAdmin = await isAdmin(userId);
     if (isTodayFocus) {
       const canViewAll = await hasPermissionWithoutRoleBypass(userId, "project.viewAll");
-      const isAdmin = req.user.role === "admin";
-      if (!isAdmin && !canViewAll) {
+      if (!userIsAdmin && !canViewAll) {
         where.AND = where.AND || [];
         where.AND.push({
           project: {
@@ -190,7 +190,7 @@ async function list(req, res) {
           },
         });
       }
-    } else if (req.user.role !== "admin") {
+    } else if (!userIsAdmin) {
       const userConditions = [
         { assignees: { some: { id: userIdNum } } },
         { createdById: userIdNum },
@@ -232,7 +232,7 @@ async function getOne(req, res) {
       select: taskGetOneSelect,
     });
     if (!task) return sendError(res, 404, "Task not found", { code: CODES.NOT_FOUND, requestId: req.id });
-    if (req.user.role !== "admin") {
+    if (!(await isAdmin(userId))) {
       const isAssignee = task.assignees.some((a) => a.id === userId);
       const isCreator = task.createdById === userId;
       if (!isAssignee && !isCreator) return sendError(res, 404, "Task not found", { code: CODES.NOT_FOUND, requestId: req.id });
@@ -600,7 +600,7 @@ async function addDependency(req, res) {
       select: { id: true, title: true, projectId: true, createdById: true, assignees: { select: { id: true } } },
     });
     if (!dependsOnTask) return sendError(res, 404, "Dependency task not found", { code: CODES.NOT_FOUND, requestId: req.id });
-    if (req.user.role !== "admin") {
+    if (!(await isAdmin(userId))) {
       const isDepAssignee = dependsOnTask.assignees.some((a) => a.id === userId);
       const isDepCreator = dependsOnTask.createdById === userId;
       if (!isDepAssignee && !isDepCreator) {
@@ -746,7 +746,7 @@ async function getDependencyCandidates(req, res) {
         ],
       });
     }
-    if (req.user.role !== "admin") {
+    if (!(await isAdmin(userId))) {
       andParts.push({
         OR: [
           { assignees: { some: { id: userId } } },
@@ -989,8 +989,8 @@ async function deleteComment(req, res) {
     if (!comment) return sendError(res, 404, "Comment not found", { code: CODES.NOT_FOUND, requestId: req.id });
 
     const isAuthor = comment.userId === userId;
-    const isAdmin = req.user.role === "admin";
-    if (!isAuthor && !isAdmin) {
+    const userIsAdmin = await isAdmin(userId);
+    if (!isAuthor && !userIsAdmin) {
       return sendError(res, 403, "Only the comment author or admin can delete this comment", { code: CODES.FORBIDDEN, requestId: req.id });
     }
 

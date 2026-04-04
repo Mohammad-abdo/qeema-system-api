@@ -1,10 +1,11 @@
 "use strict";
 
-const { hasPermissionWithoutRoleBypass } = require("../lib/rbac");
+const { hasPermissionWithoutRoleBypass, isAdmin } = require("../lib/rbac");
 const { sendError, CODES } = require("../lib/errorResponse");
 
 /**
  * Middleware that requires a specific permission. Use after authMiddleware.
+ * Admin (RBAC role "admin") is allowed regardless of permission.
  * @param {string} permission - Permission key (e.g. "project.create", "task.delete")
  * @param {("body"|"params"|"query")} [projectIdSource] - Where to read projectId from (body.projectId, params.id, etc.)
  * @param {string} [projectIdKey] - Key name, e.g. "projectId" or "id"
@@ -15,6 +16,9 @@ function requirePermission(permission, projectIdSource = "params", projectIdKey 
     const userId = Number(req.user?.id);
     if (!userId) {
       return sendError(res, 401, "Unauthorized", { code: CODES.UNAUTHORIZED, requestId });
+    }
+    if (await isAdmin(userId)) {
+      return next();
     }
     let projectId;
     if (projectIdSource === "body") projectId = req.body?.[projectIdKey] ? parseInt(req.body[projectIdKey], 10) : undefined;

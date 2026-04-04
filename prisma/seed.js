@@ -19,103 +19,20 @@
 
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
+const { getAllPermissions } = require('./seed-shared');
 const prisma = new PrismaClient();
-
-// ─── Full Permissions Definitions (RBAC) ─────────────────────────────────────
-const PERMISSIONS = {
-    USER: {
-        CREATE: 'user.create',
-        READ: 'user.read',
-        UPDATE: 'user.update',
-        DELETE: 'user.delete',
-        ASSIGN_ROLE: 'user.assign_role',
-        ACTIVATE: 'user.activate',
-        DEACTIVATE: 'user.deactivate',
-    },
-    TEAM: {
-        CREATE: 'team.create',
-        READ: 'team.read',
-        UPDATE: 'team.update',
-        DELETE: 'team.delete',
-        ADD_MEMBER: 'team.add_member',
-        REMOVE_MEMBER: 'team.remove_member',
-        ASSIGN_PROJECT: 'team.assign_project',
-        REMOVE_PROJECT: 'team.remove_project',
-    },
-    PROJECT: {
-        CREATE: 'project.create',
-        READ: 'project.read',
-        UPDATE: 'project.update',
-        DELETE: 'project.delete',
-        VIEW_ALL: 'project.viewAll',
-        ASSIGN_TEAM: 'project.assign_team',
-        REMOVE_TEAM: 'project.remove_team',
-        MANAGE_SETTINGS: 'project.manage_settings',
-    },
-    TASK: {
-        CREATE: 'task.create',
-        READ: 'task.read',
-        UPDATE: 'task.update',
-        DELETE: 'task.delete',
-        ASSIGN: 'task.assign',
-        CHANGE_STATUS: 'task.change_status',
-        CHANGE_PRIORITY: 'task.change_priority',
-    },
-    DEPENDENCY: {
-        CREATE: 'dependency.create',
-        READ: 'dependency.read',
-        UPDATE: 'dependency.update',
-        DELETE: 'dependency.delete',
-        MANUAL_UNBLOCK: 'dependency.manual_unblock',
-    },
-    TODAY_TASK: {
-        ASSIGN: 'today_task.assign',
-        REMOVE: 'today_task.remove',
-        REORDER: 'today_task.reorder',
-        VIEW_ALL: 'today_task.view_all',
-    },
-    SETTINGS: {
-        GLOBAL_READ: 'settings.global.read',
-        GLOBAL_EDIT: 'settings.global.edit',
-        PROJECT_READ: 'settings.project.read',
-        PROJECT_EDIT: 'settings.project.edit',
-        USER_READ: 'settings.user.read',
-        USER_EDIT: 'settings.user.edit',
-    },
-    NOTIFICATION: {
-        VIEW: 'notification.view',
-        MANAGE: 'notification.manage',
-        CONFIGURE: 'notification.configure',
-    },
-    LOG: {
-        VIEW: 'log.view',
-        EXPORT: 'log.export',
-        VIEW_DETAILS: 'log.view_details',
-    },
-    ROLE: {
-        CREATE: 'role.create',
-        READ: 'role.read',
-        UPDATE: 'role.update',
-        DELETE: 'role.delete',
-        ASSIGN: 'role.assign',
-        MANAGE_PERMISSIONS: 'role.manage_permissions',
-    },
-    REPORT: {
-        VIEW: 'report.view',
-        EXPORT: 'report.export',
-        GENERATE: 'report.generate',
-    },
-};
-
-function getAllPermissions() {
-    return Object.values(PERMISSIONS).flatMap((mod) => Object.values(mod));
-}
 
 // ─── Main Function ──────────────────────────────────────────────────────
 async function main() {
     console.log('🌱 Starting database seed...\n');
 
-    // 1) Clear old data (optional - remove this section if you want to keep the data)
+    if (process.env.NODE_ENV === 'production') {
+        console.error('❌ ABORT: This seed script is DESTRUCTIVE (deleteMany). It must never run in production.');
+        console.error('   Use: npm run seed:prod:safe  for production-safe idempotent bootstrap.');
+        process.exit(1);
+    }
+
+    // 1) Clear old data (local/dev only - guarded above in production)
     console.log('🗑️  Clearing old data...');
     await prisma.taskLabel.deleteMany();
     await prisma.label.deleteMany();
@@ -324,13 +241,18 @@ async function main() {
     for (const key of allKeys) {
         const [module, ...actionParts] = key.split('.');
         const action = actionParts.join('.');
-        const name = action.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+        let name = action.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+        let description = 'Permission to ' + action.replace(/_/g, ' ');
+        if (key === 'today_task.assign') {
+            name = 'Task Assignment';
+            description = "Access Task Assignment (Today's focus) page and assign tasks to users";
+        }
         const category = actionParts.length > 1 ? actionParts[0] : null;
         const p = await prisma.permission.create({
             data: {
                 key,
                 name,
-                description: 'Permission to ' + action.replace(/_/g, ' '),
+                description,
                 module,
                 category,
             },
@@ -387,6 +309,20 @@ async function main() {
     }
     console.log('✅ Mapped ' + permissions.length + ' permissions to admin role');
 
+    // 7b) Map today_task.* permissions to team_lead role
+    const teamLeadRole = await prisma.role.findFirst({ where: { name: 'team_lead' } });
+    if (teamLeadRole) {
+        const todayTaskPerms = permissions.filter((p) =>
+            ['today_task.assign', 'today_task.remove', 'today_task.reorder', 'today_task.view_all'].includes(p.key)
+        );
+        for (const perm of todayTaskPerms) {
+            await prisma.rolePermission.create({
+                data: { roleId: teamLeadRole.id, permissionId: perm.id },
+            });
+        }
+        console.log('✅ Mapped ' + todayTaskPerms.length + ' today_task permissions to team_lead role');
+    }
+
     // 8) Labels
     console.log('🏷️  Creating labels...');
     const labels = await Promise.all([
@@ -411,7 +347,6 @@ async function main() {
     ]);
     console.log('✅ Created ' + labels.length + ' labels');
 
-<<<<<<< HEAD
     // 9) Admin System Account Creation (Admin Bootstrap) if enabled
     console.log('👨‍💼 Setting up admin user (Admin Bootstrap)...');
 
@@ -441,9 +376,7 @@ async function main() {
             process.exit(1);
         }
 
-        // Hash securely
         const passwordHash = await bcrypt.hash(adminPassword, 10);
-
         const adminData = {
             username: adminUsername,
             email: adminEmail,
@@ -455,17 +388,6 @@ async function main() {
             where: { username: adminUsername },
             update: {
                 email: adminEmail,
-=======
-    // 9) مستخدم الأدمن + ربطه بدور admin (نطاق عام)
-    console.log('👨‍💼 إنشاء مستخدم الأدمن...');
-    const passwordHash = await bcrypt.hash('qeematech123', 10);
-    let adminUser = await prisma.user.findUnique({ where: { username: 'admin' } });
-    if (!adminUser) {
-        adminUser = await prisma.user.create({
-            data: {
-                username: 'admin',
-                email: 'aadmin@qeematech.net',
->>>>>>> 7af0ea138612e4a8e57e15217f958a930c007e66
                 passwordHash,
                 role: 'admin',
             },

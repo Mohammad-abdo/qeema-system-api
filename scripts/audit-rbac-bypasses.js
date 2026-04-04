@@ -23,7 +23,7 @@ function scanDirectory(dirPath, baseDir = dirPath) {
             if (entry.name.startsWith('.') || ['node_modules', 'dist', 'build'].includes(entry.name)) continue;
             if (entry.isDirectory()) {
                 findings.push(...scanDirectory(fullPath, baseDir));
-            } else if (entry.isFile() && (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx'))) {
+            } else if (entry.isFile() && (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx') || entry.name.endsWith('.js'))) {
                 const content = fs.readFileSync(fullPath, 'utf-8');
                 const lines = content.split('\n');
                 const relPath = path.relative(baseDir, fullPath);

@@ -3,6 +3,7 @@
 const path = require("path");
 const fs = require("fs");
 const { prisma } = require("../lib/prisma");
+const { hasPermissionWithoutRoleBypass, isAdmin } = require("../lib/rbac");
 const { sendError, CODES } = require("../lib/errorResponse");
 const { logActivity } = require("../lib/activityLogger");
 
@@ -40,6 +41,10 @@ async function getBrandingPublic(req, res) {
 }
 
 async function getByKey(req, res) {
+  const userId = Number(req.user?.id);
+  if (!userId) return sendError(res, 401, "Unauthorized", { code: CODES.UNAUTHORIZED, requestId: req.id });
+  const allowed = await hasPermissionWithoutRoleBypass(userId, "settings.global.read") || (await isAdmin(userId));
+  if (!allowed) return sendError(res, 403, "Permission denied", { code: CODES.FORBIDDEN, requestId: req.id });
   try {
     const key = req.query.key;
     if (!key) {
@@ -62,11 +67,11 @@ async function getByKey(req, res) {
  * For "general" key, value is JSON string: {"systemName":"...","systemLogo":"...","allowRegistration":true}
  */
 async function setByKey(req, res) {
+  const userId = Number(req.user?.id);
+  if (!userId) return sendError(res, 401, "Unauthorized", { code: CODES.UNAUTHORIZED, requestId: req.id });
+  const allowed = await hasPermissionWithoutRoleBypass(userId, "settings.global.edit") || (await isAdmin(userId));
+  if (!allowed) return sendError(res, 403, "Permission denied", { code: CODES.FORBIDDEN, requestId: req.id });
   try {
-    const userId = Number(req.user?.id);
-    if (!userId) {
-      return sendError(res, 401, "Unauthorized", { code: CODES.UNAUTHORIZED, requestId: req.id });
-    }
     const { key, value, category } = req.body || {};
     if (!key || value === undefined) {
       return sendError(res, 400, "key and value are required", { code: CODES.BAD_REQUEST, requestId: req.id });
@@ -114,9 +119,9 @@ async function setByKey(req, res) {
 async function uploadLogo(req, res) {
   const requestId = req.id;
   const userId = Number(req.user?.id);
-  if (!userId) {
-    return sendError(res, 401, "Unauthorized", { code: CODES.UNAUTHORIZED, requestId });
-  }
+  if (!userId) return sendError(res, 401, "Unauthorized", { code: CODES.UNAUTHORIZED, requestId });
+  const allowed = await hasPermissionWithoutRoleBypass(userId, "settings.global.edit") || (await isAdmin(userId));
+  if (!allowed) return sendError(res, 403, "Permission denied", { code: CODES.FORBIDDEN, requestId });
   const file = req.file;
   if (!file) {
     return sendError(res, 400, "No file uploaded; use field name 'logo'", { code: CODES.BAD_REQUEST, requestId });

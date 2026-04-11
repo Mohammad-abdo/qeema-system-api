@@ -83,6 +83,7 @@ CREATE TABLE `tasks` (
     `deliverable_id` INTEGER NULL,
     `started_at` DATETIME(3) NULL,
     `completed_at` DATETIME(3) NULL,
+    `rollover_count` INTEGER NOT NULL DEFAULT 0,
 
     INDEX `tasks_task_status_id_idx`(`task_status_id`),
     INDEX `tasks_project_id_idx`(`project_id`),
@@ -225,6 +226,7 @@ CREATE TABLE `notifications` (
     `title` VARCHAR(191) NOT NULL,
     `message` VARCHAR(191) NOT NULL,
     `type` VARCHAR(191) NOT NULL DEFAULT 'info',
+    `link_url` VARCHAR(191) NULL,
     `is_read` BOOLEAN NOT NULL DEFAULT false,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `user_id` INTEGER NOT NULL,

@@ -39,19 +39,25 @@ const PORT = Number(process.env.PORT) || 4000;
 const BODY_LIMIT = process.env.BODY_LIMIT || "512kb";
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS) || 30000;
 
-// CORS: allowlist from CORS_ORIGINS (comma-separated) or single CORS_ORIGIN.
-// Default allows common dev origins (Next.js 3000, Vite 5173) so React frontend gets data.
+// CORS: CORS_ORIGINS (comma-separated) and/or CORS_ORIGIN are merged with defaults — not a full
+// replacement — so a single CORS_ORIGIN=http://localhost:3000 does not block production.
+// Override: set CORS_STRICT=1 to use only env-listed origins (no defaults).
 const defaultOrigins = [
   "http://localhost:3000",
   "http://localhost:5173",
   "http://127.0.0.1:3000",
   "http://127.0.0.1:5173",
+  "https://qeemasupport.site",
+  "https://www.qeemasupport.site",
 ];
-const corsOrigins = process.env.CORS_ORIGINS
+const extraFromEnv = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean)
   : process.env.CORS_ORIGIN
-    ? [process.env.CORS_ORIGIN]
-    : defaultOrigins;
+    ? [process.env.CORS_ORIGIN.trim()].filter(Boolean)
+    : [];
+const corsOrigins = process.env.CORS_STRICT === "1" && extraFromEnv.length
+  ? [...new Set(extraFromEnv)]
+  : [...new Set([...defaultOrigins, ...extraFromEnv])];
 const corsOptions = {
   origin: corsOrigins.length === 1 ? corsOrigins[0] : (origin, cb) => {
     if (!origin || corsOrigins.includes(origin)) cb(null, true);

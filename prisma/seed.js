@@ -247,6 +247,14 @@ async function main() {
             name = 'Task Assignment';
             description = "Access Task Assignment (Today's focus) page and assign tasks to users";
         }
+        if (key === 'focus.shift.daily.view') {
+            name = 'Daily Shift Sheet';
+            description = 'Access daily shift sheet report for users';
+        }
+        if (key === 'focus.shift.edit') {
+            name = 'Edit Shift Sheet';
+            description = 'Edit daily shift records for users';
+        }
         const category = actionParts.length > 1 ? actionParts[0] : null;
         const p = await prisma.permission.create({
             data: {
@@ -321,6 +329,30 @@ async function main() {
             });
         }
         console.log('✅ Mapped ' + todayTaskPerms.length + ' today_task permissions to team_lead role');
+    }
+
+    // 7c) Map daily shift sheet permission to project_manager role
+    const projectManagerRole = await prisma.role.findFirst({ where: { name: 'project_manager' } });
+    if (projectManagerRole) {
+        const shiftPerms = permissions.filter((p) => ['focus.shift.daily.view', 'focus.shift.edit'].includes(p.key));
+        for (const shiftPerm of shiftPerms) {
+            await prisma.rolePermission.create({
+                data: { roleId: projectManagerRole.id, permissionId: shiftPerm.id },
+            });
+        }
+        console.log('✅ Mapped daily shift permissions to project_manager role');
+    }
+
+    // 7d) Map metadata read permission to developer role
+    const developerRole = await prisma.role.findFirst({ where: { name: 'developer' } });
+    if (developerRole) {
+        const metadataReadPerm = permissions.find((p) => p.key === 'settings.global.read');
+        if (metadataReadPerm) {
+            await prisma.rolePermission.create({
+                data: { roleId: developerRole.id, permissionId: metadataReadPerm.id },
+            });
+            console.log('✅ Mapped settings.global.read permission to developer role');
+        }
     }
 
     // 8) Labels

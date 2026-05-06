@@ -7,23 +7,54 @@ const { logActivity } = require("../lib/activityLogger");
 
 async function requireGlobalRead(req, res) {
   const userId = Number(req.user?.id);
-  if (!userId) return sendError(res, 401, "Unauthorized", { code: CODES.UNAUTHORIZED, requestId: req.id });
+  if (!userId) {
+    sendError(res, 401, "Unauthorized", { code: CODES.UNAUTHORIZED, requestId: req.id });
+    return false;
+  }
   const allowed = await hasPermissionWithoutRoleBypass(userId, "settings.global.read") || (await isAdmin(userId));
-  if (!allowed) return sendError(res, 403, "Permission denied", { code: CODES.FORBIDDEN, requestId: req.id });
-  return null;
+  if (!allowed) {
+    sendError(res, 403, "Permission denied", { code: CODES.FORBIDDEN, requestId: req.id });
+    return false;
+  }
+  return true;
+}
+
+async function requireTaskStatusRead(req, res) {
+  const userId = Number(req.user?.id);
+  if (!userId) {
+    sendError(res, 401, "Unauthorized", { code: CODES.UNAUTHORIZED, requestId: req.id });
+    return false;
+  }
+  const canReadGlobal =
+    (await hasPermissionWithoutRoleBypass(userId, "settings.global.read")) || (await isAdmin(userId));
+  if (canReadGlobal) return true;
+  const canUseTaskWorkflow =
+    (await hasPermissionWithoutRoleBypass(userId, "task.update")) ||
+    (await hasPermissionWithoutRoleBypass(userId, "task.create")) ||
+    (await hasPermissionWithoutRoleBypass(userId, "task.read"));
+  if (!canUseTaskWorkflow) {
+    sendError(res, 403, "Permission denied", { code: CODES.FORBIDDEN, requestId: req.id });
+    return false;
+  }
+  return true;
 }
 
 async function requireGlobalEdit(req, res) {
   const userId = Number(req.user?.id);
-  if (!userId) return sendError(res, 401, "Unauthorized", { code: CODES.UNAUTHORIZED, requestId: req.id });
+  if (!userId) {
+    sendError(res, 401, "Unauthorized", { code: CODES.UNAUTHORIZED, requestId: req.id });
+    return false;
+  }
   const allowed = await hasPermissionWithoutRoleBypass(userId, "settings.global.edit") || (await isAdmin(userId));
-  if (!allowed) return sendError(res, 403, "Permission denied", { code: CODES.FORBIDDEN, requestId: req.id });
-  return null;
+  if (!allowed) {
+    sendError(res, 403, "Permission denied", { code: CODES.FORBIDDEN, requestId: req.id });
+    return false;
+  }
+  return true;
 }
 
 async function list(req, res) {
-  const authErr = await requireGlobalRead(req, res);
-  if (authErr) return;
+  if (!(await requireTaskStatusRead(req, res))) return;
   try {
     const includeInactive = req.query.includeInactive === "true";
     const where = includeInactive ? {} : { isActive: true };
@@ -41,8 +72,7 @@ async function list(req, res) {
 }
 
 async function getOne(req, res) {
-  const authErr = await requireGlobalRead(req, res);
-  if (authErr) return;
+  if (!(await requireTaskStatusRead(req, res))) return;
   try {
     const id = parseInt(req.params.id, 10);
     if (Number.isNaN(id)) return sendError(res, 400, "Invalid ID", { code: CODES.BAD_REQUEST, requestId: req.id });
@@ -60,6 +90,7 @@ async function getOne(req, res) {
 }
 
 async function create(req, res) {
+  if (!(await requireGlobalEdit(req, res))) return;
   try {
     const {
       name,
@@ -112,8 +143,7 @@ async function create(req, res) {
 }
 
 async function update(req, res) {
-  const authErr = await requireGlobalEdit(req, res);
-  if (authErr) return;
+  if (!(await requireGlobalEdit(req, res))) return;
   try {
     const id = parseInt(req.params.id, 10);
     if (Number.isNaN(id)) return sendError(res, 400, "Invalid ID", { code: CODES.BAD_REQUEST, requestId: req.id });
@@ -161,8 +191,7 @@ async function update(req, res) {
 }
 
 async function remove(req, res) {
-  const authErr = await requireGlobalEdit(req, res);
-  if (authErr) return;
+  if (!(await requireGlobalEdit(req, res))) return;
   try {
     const id = parseInt(req.params.id, 10);
     if (Number.isNaN(id)) return sendError(res, 400, "Invalid ID", { code: CODES.BAD_REQUEST, requestId: req.id });
@@ -196,8 +225,7 @@ async function remove(req, res) {
 }
 
 async function toggle(req, res) {
-  const authErr = await requireGlobalEdit(req, res);
-  if (authErr) return;
+  if (!(await requireGlobalEdit(req, res))) return;
   try {
     const id = parseInt(req.params.id, 10);
     if (Number.isNaN(id)) return sendError(res, 400, "Invalid ID", { code: CODES.BAD_REQUEST, requestId: req.id });
@@ -218,8 +246,7 @@ async function toggle(req, res) {
 }
 
 async function reorder(req, res) {
-  const authErr = await requireGlobalEdit(req, res);
-  if (authErr) return;
+  if (!(await requireGlobalEdit(req, res))) return;
   try {
     const { ids } = req.body || {};
     if (!Array.isArray(ids) || ids.length === 0) return sendError(res, 400, "ids array is required", { code: CODES.BAD_REQUEST, requestId: req.id });

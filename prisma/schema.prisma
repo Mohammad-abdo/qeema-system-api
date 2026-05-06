@@ -37,6 +37,7 @@ model User {
   updatedSettings                SystemSetting[]                 @relation("SettingsUpdater")
   tasksCreated                   Task[]                          @relation("TaskCreator")
   timeLogs                       TimeLog[]
+  workShifts                     WorkShift[]
   userSettingsUpdated            UserSetting[]                   @relation("UserSettingsUpdater")
   userSettings                   UserSetting[]                   @relation("UserSettings")
   userSettingsChanged            UserSettingsChangeLog[]         @relation("UserSettingsChanger")
@@ -289,6 +290,25 @@ model TimeLog {
   user        User     @relation(fields: [userId], references: [id])
 
   @@map("time_logs")
+}
+
+model WorkShift {
+  id                 Int       @id @default(autoincrement())
+  userId             Int       @map("user_id")
+  shiftDate          String    @map("shift_date")
+  startAt            DateTime  @map("start_at")
+  endAt              DateTime? @map("end_at")
+  pausedAt           DateTime? @map("paused_at")
+  pausedSecondsTotal Int       @default(0) @map("paused_seconds_total")
+  notes              String?
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, shiftDate])
+  @@index([shiftDate])
+  @@index([userId, shiftDate])
+  @@map("work_shifts")
 }
 
 model AutomationRule {

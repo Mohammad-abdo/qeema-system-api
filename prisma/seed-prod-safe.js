@@ -49,6 +49,14 @@ function permNameDesc(key) {
         name = 'Task Assignment';
         description = "Access Task Assignment (Today's focus) page and assign tasks to users";
     }
+    if (key === 'focus.shift.daily.view') {
+        name = 'Daily Shift Sheet';
+        description = 'Access daily shift sheet report for users';
+    }
+    if (key === 'focus.shift.edit') {
+        name = 'Edit Shift Sheet';
+        description = 'Edit daily shift records for users';
+    }
     return { name, description, module, category: actionParts.length > 1 ? actionParts[0] : null };
 }
 
@@ -108,6 +116,30 @@ async function main() {
         if (!existing) {
             await prisma.rolePermission.create({
                 data: { roleId: roles.team_lead.id, permissionId: permId },
+            });
+        }
+    }
+    const shiftPermKeys = ['focus.shift.daily.view', 'focus.shift.edit'];
+    for (const key of shiftPermKeys) {
+        const permId = permissionMap.get(key);
+        if (!permId) continue;
+        const existing = await prisma.rolePermission.findUnique({
+            where: { roleId_permissionId: { roleId: roles.project_manager.id, permissionId: permId } },
+        });
+        if (!existing) {
+            await prisma.rolePermission.create({
+                data: { roleId: roles.project_manager.id, permissionId: permId },
+            });
+        }
+    }
+    const metadataReadPermId = permissionMap.get('settings.global.read');
+    if (metadataReadPermId) {
+        const existing = await prisma.rolePermission.findUnique({
+            where: { roleId_permissionId: { roleId: roles.developer.id, permissionId: metadataReadPermId } },
+        });
+        if (!existing) {
+            await prisma.rolePermission.create({
+                data: { roleId: roles.developer.id, permissionId: metadataReadPermId },
             });
         }
     }

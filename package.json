@@ -5,14 +5,17 @@
   "description": "PMS backend API service (Phase 2)",
   "main": "src/server.js",
   "scripts": {
+    "test": "npm run test:kpis",
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "prisma:generate": "prisma generate --schema=./prisma/schema.prisma",
+    "deploy:db": "node scripts/prisma-production-guard.js migrate deploy",
+    "prisma:prod": "node scripts/prisma-production-guard.js",
     "prisma:seed": "node prisma/seed.js",
     "seed:dev:reset": "node prisma/seed.js",
     "seed:prod:safe": "node prisma/seed-prod-safe.js",
     "test:api": "node scripts/test-api.js",
-    "test:kpis": "node src/tests/todaysFocusReportKpis.test.js",
+    "test:kpis": "node src/tests/todaysFocusReportKpis.runner.js",
     "script:init-rbac": "node scripts/initialize-rbac.js",
     "script:list-users": "node scripts/list-users.js",
     "script:verify-db": "node scripts/verify-db-counts.js",
@@ -21,7 +24,8 @@
     "script:check-permissions": "node scripts/check-permissions.js",
     "script:audit-rbac-bypasses": "node scripts/audit-rbac-bypasses.js",
     "test:change-password": "node scripts/test-change-password.js",
-    "script:validate-seed-safety": "node scripts/validate-seed-safety.js"
+    "script:validate-seed-safety": "node scripts/validate-seed-safety.js",
+    "script:export-data": "node scripts/export-business-data.js"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.7.0",

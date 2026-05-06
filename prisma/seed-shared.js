@@ -14,6 +14,7 @@ const PERMISSIONS = {
     LOG: { VIEW: 'log.view', EXPORT: 'log.export', VIEW_DETAILS: 'log.view_details' },
     ROLE: { CREATE: 'role.create', READ: 'role.read', UPDATE: 'role.update', DELETE: 'role.delete', ASSIGN: 'role.assign', MANAGE_PERMISSIONS: 'role.manage_permissions' },
     REPORT: { VIEW: 'report.view', EXPORT: 'report.export', GENERATE: 'report.generate' },
+    FOCUS: { SHIFT_DAILY_VIEW: 'focus.shift.daily.view', SHIFT_EDIT: 'focus.shift.edit' },
 };
 
 function getAllPermissions() {

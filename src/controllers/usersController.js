@@ -5,6 +5,7 @@ const { prisma } = require("../lib/prisma");
 const { hasPermissionWithoutRoleBypass } = require("../lib/rbac");
 const { sendError, CODES } = require("../lib/errorResponse");
 const { logActivity } = require("../lib/activityLogger");
+const { notifyUsers } = require("../lib/notifyUsers");
 
 async function list(req, res) {
   try {
@@ -322,6 +323,53 @@ async function getTasks(req, res) {
   }
 }
 
+async function notify(req, res) {
+  try {
+    const targetId = parseInt(req.params.id, 10);
+    if (Number.isNaN(targetId)) return sendError(res, 400, "Invalid user ID", { code: CODES.BAD_REQUEST, requestId: req.id });
+    const requesterId = Number(req.user?.id);
+    if (!requesterId) return sendError(res, 401, "Unauthorized", { code: CODES.UNAUTHORIZED, requestId: req.id });
+    const allowed = await hasPermissionWithoutRoleBypass(requesterId, "user.update");
+    if (!allowed) {
+      return sendError(res, 403, "Permission denied", { code: CODES.FORBIDDEN, requestId: req.id });
+    }
+    const target = await prisma.user.findUnique({
+      where: { id: targetId },
+      select: { id: true, username: true, isActive: true },
+    });
+    if (!target) return sendError(res, 404, "User not found", { code: CODES.NOT_FOUND, requestId: req.id });
+    const body = req.body || {};
+    const title = String(body.title ?? "").trim();
+    const message = String(body.message ?? "").trim();
+    if (!title || title.length > 200) {
+      return sendError(res, 400, "Title is required (max 200 characters)", { code: CODES.BAD_REQUEST, requestId: req.id });
+    }
+    if (!message || message.length > 5000) {
+      return sendError(res, 400, "Message is required (max 5000 characters)", { code: CODES.BAD_REQUEST, requestId: req.id });
+    }
+    let type = String(body.type ?? "info").trim().toLowerCase();
+    if (!["info", "warning", "success", "error"].includes(type)) type = "info";
+    let linkUrl = null;
+    if (body.linkUrl != null && String(body.linkUrl).trim()) {
+      linkUrl = String(body.linkUrl).trim().slice(0, 500);
+    }
+    const count = await notifyUsers([{ userId: targetId, title, message, type, linkUrl }]);
+    await logActivity({
+      actionType: "user_notified",
+      actionCategory: "user",
+      entityType: "user",
+      entityId: targetId,
+      performedById: requesterId,
+      affectedUserId: targetId,
+      actionSummary: `In-app notification sent to ${target.username}`,
+    }, req);
+    return res.status(201).json({ success: true, count });
+  } catch (err) {
+    console.error("[usersController] notify:", err);
+    sendError(res, 500, err.message || "Failed to send notification", { code: CODES.INTERNAL_ERROR, requestId: req.id });
+  }
+}
+
 async function getTeams(req, res) {
   try {
     const id = parseInt(req.params.id, 10);
@@ -359,6 +407,7 @@ module.exports = {
   create,
   update,
   remove,
+  notify,
   getProjects,
   getTasks,
   getTeams,

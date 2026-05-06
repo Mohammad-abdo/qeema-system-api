@@ -23,6 +23,7 @@ async function canManageFocusReset(userId) {
     if (hasPerm) return true;
     return isAdmin(id);
 }
+
 const { prisma } = require("../lib/prisma");
 
 const CAIRO_TIMEZONE = "Africa/Cairo";
@@ -69,6 +70,57 @@ function getCairoDayRangeUtc(dateStr) {
     const start = new Date(Date.UTC(y, m - 1, d, -offsetHours, 0, 0, 0));
     const end = new Date(Date.UTC(y, m - 1, d, 24 - offsetHours - 1, 59, 59, 999));
     return { start, end };
+}
+
+function parseShiftDate(dateStr) {
+    if (!dateStr) return getCairoDateString();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return null;
+    return dateStr;
+}
+
+function parseDateTimeField(value) {
+    if (value === null || value === undefined || value === "") return null;
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return parsed;
+}
+
+/**
+ * Working duration excluding pause time (wall clock minus paused segments).
+ */
+function computeEffectiveDurationMinutes(shift) {
+    if (!shift?.startAt) return null;
+    const now = new Date();
+    const end = shift.endAt || now;
+    const wallMs = end.getTime() - shift.startAt.getTime();
+    let pauseMs = (shift.pausedSecondsTotal || 0) * 1000;
+    if (shift.pausedAt) {
+        const pauseEnd = shift.endAt || now;
+        pauseMs += pauseEnd.getTime() - shift.pausedAt.getTime();
+    }
+    return Math.max(0, Math.round((wallMs - pauseMs) / 60000));
+}
+
+function buildShiftStatus(shift) {
+    if (!shift) {
+        return {
+            status: "not_started",
+            shift: null,
+            durationMinutes: null,
+        };
+    }
+
+    let status = "started";
+    if (shift.endAt) status = "ended";
+    else if (shift.pausedAt) status = "paused";
+
+    const durationMinutes = computeEffectiveDurationMinutes(shift);
+
+    return {
+        status,
+        shift,
+        durationMinutes,
+    };
 }
 
 /**
@@ -539,6 +591,478 @@ router.post("/focus/auto-reset", authMiddleware, async (req, res) => {
             code: CODES.INTERNAL_ERROR,
             details: error.message,
         });
+    }
+});
+
+/**
+ * POST /api/v1/focus/shift/start
+ * Start current user's shift for a date (default: today in Cairo)
+ */
+router.post("/focus/shift/start", authMiddleware, async (req, res) => {
+    try {
+        const userId = Number(req.user?.id);
+        if (!userId) {
+            return sendError(res, 401, "Unauthorized", { code: CODES.UNAUTHORIZED, requestId: req.id });
+        }
+
+        const shiftDate = parseShiftDate(req.body?.date);
+        if (!shiftDate) {
+            return sendError(res, 400, "Invalid date format. Expected YYYY-MM-DD", { code: CODES.BAD_REQUEST, requestId: req.id });
+        }
+
+        const existing = await prisma.workShift.findUnique({
+            where: { userId_shiftDate: { userId, shiftDate } },
+        });
+        if (existing) {
+            return sendError(
+                res,
+                409,
+                existing.endAt ? "Shift already completed for this date" : "Shift already started for this date",
+                { code: CODES.CONFLICT, requestId: req.id }
+            );
+        }
+
+        const shift = await prisma.workShift.create({
+            data: {
+                userId,
+                shiftDate,
+                startAt: new Date(),
+                pausedAt: null,
+                pausedSecondsTotal: 0,
+                notes: req.body?.notes || null,
+            },
+        });
+
+        await logActivity({
+            actionType: "work_shift_started",
+            actionCategory: "today_task",
+            entityType: "work_shift",
+            entityId: shift.id,
+            performedById: userId,
+            actionSummary: "User started a daily shift",
+            actionDetails: {
+                shiftDate,
+                startAt: shift.startAt.toISOString(),
+            },
+        }, req);
+
+        sendSuccess(res, buildShiftStatus(shift));
+    } catch (error) {
+        if (error?.code === "P2002") {
+            return sendError(res, 409, "Shift already started for this date", { code: CODES.CONFLICT, requestId: req.id });
+        }
+        console.error("POST /focus/shift/start Error:", error);
+        sendError(res, 500, "Failed to start shift", {
+            code: CODES.INTERNAL_ERROR,
+            requestId: req.id,
+        });
+    }
+});
+
+/**
+ * POST /api/v1/focus/shift/end
+ * End current user's started shift for a date (default: today in Cairo)
+ */
+router.post("/focus/shift/end", authMiddleware, async (req, res) => {
+    try {
+        const userId = Number(req.user?.id);
+        if (!userId) {
+            return sendError(res, 401, "Unauthorized", { code: CODES.UNAUTHORIZED, requestId: req.id });
+        }
+
+        const shiftDate = parseShiftDate(req.body?.date);
+        if (!shiftDate) {
+            return sendError(res, 400, "Invalid date format. Expected YYYY-MM-DD", { code: CODES.BAD_REQUEST, requestId: req.id });
+        }
+
+        const existing = await prisma.workShift.findUnique({
+            where: { userId_shiftDate: { userId, shiftDate } },
+        });
+
+        if (!existing) {
+            return sendError(res, 404, "No started shift found for this date", { code: CODES.NOT_FOUND, requestId: req.id });
+        }
+        if (existing.endAt) {
+            return sendError(res, 409, "Shift already ended for this date", { code: CODES.CONFLICT, requestId: req.id });
+        }
+
+        const now = new Date();
+        let extraPauseSec = 0;
+        if (existing.pausedAt) {
+            extraPauseSec = Math.floor((now.getTime() - existing.pausedAt.getTime()) / 1000);
+        }
+        const shift = await prisma.workShift.update({
+            where: { id: existing.id },
+            data: {
+                endAt: now,
+                pausedAt: null,
+                pausedSecondsTotal: (existing.pausedSecondsTotal || 0) + extraPauseSec,
+            },
+        });
+
+        await logActivity({
+            actionType: "work_shift_ended",
+            actionCategory: "today_task",
+            entityType: "work_shift",
+            entityId: shift.id,
+            performedById: userId,
+            actionSummary: "User ended a daily shift",
+            actionDetails: {
+                shiftDate,
+                startAt: shift.startAt?.toISOString?.() || null,
+                endAt: shift.endAt?.toISOString?.() || null,
+            },
+        }, req);
+
+        sendSuccess(res, buildShiftStatus(shift));
+    } catch (error) {
+        console.error("POST /focus/shift/end Error:", error);
+        sendError(res, 500, "Failed to end shift", {
+            code: CODES.INTERNAL_ERROR,
+            requestId: req.id,
+        });
+    }
+});
+
+/**
+ * POST /api/v1/focus/shift/pause
+ * Pause an active shift (break, meeting, etc.). Duration excludes paused time.
+ */
+router.post("/focus/shift/pause", authMiddleware, async (req, res) => {
+    try {
+        const userId = Number(req.user?.id);
+        if (!userId) {
+            return sendError(res, 401, "Unauthorized", { code: CODES.UNAUTHORIZED, requestId: req.id });
+        }
+
+        const shiftDate = parseShiftDate(req.body?.date);
+        if (!shiftDate) {
+            return sendError(res, 400, "Invalid date format. Expected YYYY-MM-DD", { code: CODES.BAD_REQUEST, requestId: req.id });
+        }
+
+        const existing = await prisma.workShift.findUnique({
+            where: { userId_shiftDate: { userId, shiftDate } },
+        });
+
+        if (!existing) {
+            return sendError(res, 404, "No shift found for this date", { code: CODES.NOT_FOUND, requestId: req.id });
+        }
+        if (existing.endAt) {
+            return sendError(res, 409, "Shift already ended", { code: CODES.CONFLICT, requestId: req.id });
+        }
+        if (existing.pausedAt) {
+            return sendError(res, 409, "Shift is already paused", { code: CODES.CONFLICT, requestId: req.id });
+        }
+
+        const shift = await prisma.workShift.update({
+            where: { id: existing.id },
+            data: { pausedAt: new Date() },
+        });
+
+        await logActivity({
+            actionType: "work_shift_paused",
+            actionCategory: "today_task",
+            entityType: "work_shift",
+            entityId: shift.id,
+            performedById: userId,
+            actionSummary: "User paused a daily shift",
+            actionDetails: { shiftDate, pausedAt: shift.pausedAt.toISOString() },
+        }, req);
+
+        sendSuccess(res, buildShiftStatus(shift));
+    } catch (error) {
+        console.error("POST /focus/shift/pause Error:", error);
+        sendError(res, 500, "Failed to pause shift", {
+            code: CODES.INTERNAL_ERROR,
+            requestId: req.id,
+        });
+    }
+});
+
+/**
+ * POST /api/v1/focus/shift/resume
+ * Resume a paused shift; accumulates pause time into pausedSecondsTotal.
+ */
+router.post("/focus/shift/resume", authMiddleware, async (req, res) => {
+    try {
+        const userId = Number(req.user?.id);
+        if (!userId) {
+            return sendError(res, 401, "Unauthorized", { code: CODES.UNAUTHORIZED, requestId: req.id });
+        }
+
+        const shiftDate = parseShiftDate(req.body?.date);
+        if (!shiftDate) {
+            return sendError(res, 400, "Invalid date format. Expected YYYY-MM-DD", { code: CODES.BAD_REQUEST, requestId: req.id });
+        }
+
+        const existing = await prisma.workShift.findUnique({
+            where: { userId_shiftDate: { userId, shiftDate } },
+        });
+
+        if (!existing) {
+            return sendError(res, 404, "No shift found for this date", { code: CODES.NOT_FOUND, requestId: req.id });
+        }
+        if (existing.endAt) {
+            return sendError(res, 409, "Shift already ended", { code: CODES.CONFLICT, requestId: req.id });
+        }
+        if (!existing.pausedAt) {
+            return sendError(res, 409, "Shift is not paused", { code: CODES.CONFLICT, requestId: req.id });
+        }
+
+        const now = new Date();
+        const deltaSec = Math.floor((now.getTime() - existing.pausedAt.getTime()) / 1000);
+        const shift = await prisma.workShift.update({
+            where: { id: existing.id },
+            data: {
+                pausedAt: null,
+                pausedSecondsTotal: (existing.pausedSecondsTotal || 0) + deltaSec,
+            },
+        });
+
+        await logActivity({
+            actionType: "work_shift_resumed",
+            actionCategory: "today_task",
+            entityType: "work_shift",
+            entityId: shift.id,
+            performedById: userId,
+            actionSummary: "User resumed a daily shift",
+            actionDetails: { shiftDate, pauseSegmentSeconds: deltaSec },
+        }, req);
+
+        sendSuccess(res, buildShiftStatus(shift));
+    } catch (error) {
+        console.error("POST /focus/shift/resume Error:", error);
+        sendError(res, 500, "Failed to resume shift", {
+            code: CODES.INTERNAL_ERROR,
+            requestId: req.id,
+        });
+    }
+});
+
+/**
+ * GET /api/v1/focus/shift/me?date=YYYY-MM-DD
+ */
+router.get("/focus/shift/me", authMiddleware, async (req, res) => {
+    try {
+        const userId = Number(req.user?.id);
+        if (!userId) {
+            return sendError(res, 401, "Unauthorized", { code: CODES.UNAUTHORIZED, requestId: req.id });
+        }
+
+        const shiftDate = parseShiftDate(req.query?.date);
+        if (!shiftDate) {
+            return sendError(res, 400, "Invalid date format. Expected YYYY-MM-DD", { code: CODES.BAD_REQUEST, requestId: req.id });
+        }
+
+        const shift = await prisma.workShift.findUnique({
+            where: { userId_shiftDate: { userId, shiftDate } },
+        });
+
+        sendSuccess(res, {
+            date: shiftDate,
+            ...buildShiftStatus(shift),
+        });
+    } catch (error) {
+        console.error("GET /focus/shift/me Error:", error);
+        sendError(res, 500, "Failed to load shift status", {
+            code: CODES.INTERNAL_ERROR,
+            requestId: req.id,
+        });
+    }
+});
+
+/**
+ * GET /api/v1/focus/shift/daily?date=YYYY-MM-DD
+ */
+router.get("/focus/shift/daily", authMiddleware, async (req, res) => {
+    try {
+        const requesterId = Number(req.user?.id);
+        if (!requesterId) {
+            return sendError(res, 401, "Unauthorized", { code: CODES.UNAUTHORIZED, requestId: req.id });
+        }
+
+        const canView = await hasPermissionWithoutRoleBypass(requesterId, "focus.shift.daily.view");
+        if (!canView) {
+            return sendError(res, 403, "Permission denied", { code: CODES.FORBIDDEN, requestId: req.id });
+        }
+
+        const shiftDate = parseShiftDate(req.query?.date);
+        if (!shiftDate) {
+            return sendError(res, 400, "Invalid date format. Expected YYYY-MM-DD", { code: CODES.BAD_REQUEST, requestId: req.id });
+        }
+
+        const rows = await prisma.workShift.findMany({
+            where: { shiftDate },
+            include: {
+                user: {
+                    select: {
+                        id: true,
+                        username: true,
+                        role: true,
+                        team: { select: { name: true } },
+                        roles: { select: { role: { select: { name: true } } } },
+                    },
+                },
+            },
+            orderBy: { startAt: "asc" },
+        });
+
+        const data = rows.map((row) => {
+            const roleNames = (row.user?.roles || []).map((entry) => entry.role?.name).filter(Boolean);
+            const durationMinutes = computeEffectiveDurationMinutes(row);
+            return {
+                id: row.id,
+                shiftDate: row.shiftDate,
+                startAt: row.startAt,
+                endAt: row.endAt,
+                pausedAt: row.pausedAt,
+                durationMinutes,
+                notes: row.notes,
+                user: {
+                    id: row.user?.id,
+                    username: row.user?.username || "Unknown",
+                    role: roleNames[0] || row.user?.role || "developer",
+                    team: row.user?.team?.name || null,
+                },
+            };
+        });
+
+        await logActivity({
+            actionType: "work_shift_daily_report_viewed",
+            actionCategory: "today_task",
+            entityType: "work_shift",
+            performedById: requesterId,
+            actionSummary: "User viewed daily shift report",
+            actionDetails: {
+                shiftDate,
+                rowsCount: data.length,
+            },
+        }, req);
+
+        sendSuccess(res, { date: shiftDate, rows: data });
+    } catch (error) {
+        console.error("GET /focus/shift/daily Error:", error);
+        sendError(res, 500, "Failed to load daily shift report", {
+            code: CODES.INTERNAL_ERROR,
+            requestId: req.id,
+        });
+    }
+});
+
+/**
+ * PATCH /api/v1/focus/shift/:id
+ * Admin/PM correction endpoint for shift date/time/notes.
+ */
+router.patch("/focus/shift/:id", authMiddleware, async (req, res) => {
+    try {
+        const requesterId = Number(req.user?.id);
+        if (!requesterId) {
+            return sendError(res, 401, "Unauthorized", { code: CODES.UNAUTHORIZED, requestId: req.id });
+        }
+
+        const canEdit = await hasPermissionWithoutRoleBypass(requesterId, "focus.shift.edit");
+        if (!canEdit) {
+            return sendError(res, 403, "Permission denied", { code: CODES.FORBIDDEN, requestId: req.id });
+        }
+
+        const shiftId = Number(req.params?.id);
+        if (!shiftId) {
+            return sendError(res, 400, "Invalid shift id", { code: CODES.BAD_REQUEST, requestId: req.id });
+        }
+
+        const existing = await prisma.workShift.findUnique({ where: { id: shiftId } });
+        if (!existing) {
+            return sendError(res, 404, "Shift record not found", { code: CODES.NOT_FOUND, requestId: req.id });
+        }
+
+        const nextShiftDate = req.body?.shiftDate !== undefined ? parseShiftDate(req.body.shiftDate) : existing.shiftDate;
+        if (!nextShiftDate) {
+            return sendError(res, 400, "Invalid shiftDate format. Expected YYYY-MM-DD", { code: CODES.BAD_REQUEST, requestId: req.id });
+        }
+
+        const parsedStartAt = req.body?.startAt !== undefined ? parseDateTimeField(req.body.startAt) : existing.startAt;
+        if (!parsedStartAt) {
+            return sendError(res, 400, "Invalid startAt datetime", { code: CODES.BAD_REQUEST, requestId: req.id });
+        }
+
+        const parsedEndAt = req.body?.endAt !== undefined
+            ? (req.body.endAt === null || req.body.endAt === "" ? null : parseDateTimeField(req.body.endAt))
+            : existing.endAt;
+        if (req.body?.endAt !== undefined && req.body.endAt !== null && req.body.endAt !== "" && !parsedEndAt) {
+            return sendError(res, 400, "Invalid endAt datetime", { code: CODES.BAD_REQUEST, requestId: req.id });
+        }
+        if (parsedEndAt && parsedStartAt > parsedEndAt) {
+            return sendError(res, 400, "startAt must be earlier than or equal to endAt", { code: CODES.BAD_REQUEST, requestId: req.id });
+        }
+
+        const nextNotes = req.body?.notes !== undefined ? (req.body.notes || null) : existing.notes;
+
+        const nextPausedAt = req.body?.pausedAt !== undefined
+            ? (req.body.pausedAt === null || req.body.pausedAt === "" ? null : parseDateTimeField(req.body.pausedAt))
+            : existing.pausedAt;
+        if (req.body?.pausedAt !== undefined && req.body.pausedAt !== null && req.body.pausedAt !== "" && !nextPausedAt) {
+            return sendError(res, 400, "Invalid pausedAt datetime", { code: CODES.BAD_REQUEST, requestId: req.id });
+        }
+
+        let nextPausedSecondsTotal = existing.pausedSecondsTotal ?? 0;
+        if (req.body?.pausedSecondsTotal !== undefined) {
+            const n = Number(req.body.pausedSecondsTotal);
+            if (!Number.isFinite(n) || n < 0 || n > 86400 * 365) {
+                return sendError(res, 400, "Invalid pausedSecondsTotal", { code: CODES.BAD_REQUEST, requestId: req.id });
+            }
+            nextPausedSecondsTotal = Math.floor(n);
+        }
+
+        const updated = await prisma.workShift.update({
+            where: { id: shiftId },
+            data: {
+                shiftDate: nextShiftDate,
+                startAt: parsedStartAt,
+                endAt: parsedEndAt,
+                notes: nextNotes,
+                pausedAt: nextPausedAt,
+                pausedSecondsTotal: nextPausedSecondsTotal,
+            },
+        });
+
+        await logActivity({
+            actionType: "work_shift_updated",
+            actionCategory: "today_task",
+            entityType: "work_shift",
+            entityId: updated.id,
+            performedById: requesterId,
+            affectedUserId: updated.userId,
+            actionSummary: "User corrected a daily shift record",
+            actionDetails: {
+                shiftId: updated.id,
+                editedBy: requesterId,
+                correctedAt: new Date().toISOString(),
+                oldValues: {
+                    shiftDate: existing.shiftDate,
+                    startAt: existing.startAt?.toISOString?.() || null,
+                    endAt: existing.endAt?.toISOString?.() || null,
+                    notes: existing.notes || null,
+                    pausedAt: existing.pausedAt?.toISOString?.() || null,
+                    pausedSecondsTotal: existing.pausedSecondsTotal ?? 0,
+                },
+                newValues: {
+                    shiftDate: updated.shiftDate,
+                    startAt: updated.startAt?.toISOString?.() || null,
+                    endAt: updated.endAt?.toISOString?.() || null,
+                    notes: updated.notes || null,
+                    pausedAt: updated.pausedAt?.toISOString?.() || null,
+                    pausedSecondsTotal: updated.pausedSecondsTotal ?? 0,
+                },
+            },
+        }, req);
+
+        sendSuccess(res, buildShiftStatus(updated));
+    } catch (error) {
+        if (error?.code === "P2002") {
+            return sendError(res, 409, "A shift already exists for this user and date", { code: CODES.CONFLICT, requestId: req.id });
+        }
+        console.error("PATCH /focus/shift/:id Error:", error);
+        return sendError(res, 500, "Failed to update shift", { code: CODES.INTERNAL_ERROR, requestId: req.id });
     }
 });
 

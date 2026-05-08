@@ -1,0 +1,1358 @@
+{
+  "format": "prisma-json-backup",
+  "database": "pms",
+  "exportedAt": "2026-05-08T11:26:42.476Z",
+  "modelCount": 42,
+  "data": {
+    "User": [
+      {
+        "id": 1,
+        "username": "admin",
+        "email": "admin@qeematech.net",
+        "passwordHash": "$2b$10$/rG5SWhlggbeOnTr6qHR4.xLBYQVqbpPInW9Snnx6X4AvnhcTNRXO",
+        "role": "admin",
+        "isActive": true,
+        "createdAt": "2026-05-08T11:17:19.153Z",
+        "teamId": null,
+        "avatarUrl": null
+      }
+    ],
+    "Team": [],
+    "Project": [],
+    "Task": [],
+    "Subtask": [],
+    "SubtaskDependency": [],
+    "Comment": [],
+    "CommentMention": [],
+    "Label": [
+      {
+        "id": 1,
+        "name": "Feature",
+        "color": "#3b82f6",
+        "description": "New features and enhancements",
+        "createdAt": "2026-05-08T11:17:19.080Z"
+      },
+      {
+        "id": 2,
+        "name": "Documentation",
+        "color": "#8b5cf6",
+        "description": "Documentation updates",
+        "createdAt": "2026-05-08T11:17:19.080Z"
+      },
+      {
+        "id": 3,
+        "name": "Testing",
+        "color": "#10b981",
+        "description": "Testing and QA",
+        "createdAt": "2026-05-08T11:17:19.080Z"
+      },
+      {
+        "id": 4,
+        "name": "Refactoring",
+        "color": "#f59e0b",
+        "description": "Code refactoring and improvements",
+        "createdAt": "2026-05-08T11:17:19.080Z"
+      },
+      {
+        "id": 5,
+        "name": "Urgent",
+        "color": "#dc2626",
+        "description": "Urgent tasks",
+        "createdAt": "2026-05-08T11:17:19.081Z"
+      },
+      {
+        "id": 6,
+        "name": "Bug",
+        "color": "#ef4444",
+        "description": "Bug fixes and issues",
+        "createdAt": "2026-05-08T11:17:19.080Z"
+      }
+    ],
+    "TaskLabel": [],
+    "TaskDependency": [],
+    "TimeLog": [],
+    "WorkShift": [],
+    "AutomationRule": [],
+    "Notification": [],
+    "ActivityLog": [
+      {
+        "id": 1,
+        "actionType": "user_created",
+        "actionCategory": "user",
+        "actionSummary": "User jegihyk (xudijoge@mailinator.com) created",
+        "actionDetails": null,
+        "performedById": 1,
+        "affectedUserId": null,
+        "projectId": null,
+        "entityType": "user",
+        "entityId": 2,
+        "ipAddress": null,
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
+        "createdAt": "2026-05-08T11:18:01.838Z",
+        "action": "user_created",
+        "description": "User jegihyk (xudijoge@mailinator.com) created",
+        "userId": 1
+      },
+      {
+        "id": 2,
+        "actionType": "user_deleted",
+        "actionCategory": "user",
+        "actionSummary": "User jegihyk (xudijoge@mailinator.com) deleted",
+        "actionDetails": null,
+        "performedById": 1,
+        "affectedUserId": null,
+        "projectId": null,
+        "entityType": "user",
+        "entityId": 2,
+        "ipAddress": null,
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
+        "createdAt": "2026-05-08T11:22:02.177Z",
+        "action": "user_deleted",
+        "description": "User jegihyk (xudijoge@mailinator.com) deleted",
+        "userId": 1
+      }
+    ],
+    "ProjectUser": [],
+    "ProjectPhase": [],
+    "Deliverable": [],
+    "ScopeHistory": [],
+    "Attachment": [],
+    "SystemSetting": [],
+    "SettingsChangeLog": [],
+    "ProjectSetting": [],
+    "ProjectSettingsChangeLog": [],
+    "UserSetting": [],
+    "UserSettingsChangeLog": [],
+    "ProjectNotification": [],
+    "UrgentProjectAcknowledgement": [],
+    "ProjectNotificationPreference": [],
+    "TeamMember": [],
+    "ProjectTeam": [],
+    "Role": [
+      {
+        "id": 1,
+        "name": "admin",
+        "description": "System Administrator with full access",
+        "isSystemRole": true,
+        "createdAt": "2026-05-08T11:17:18.881Z",
+        "updatedAt": "2026-05-08T11:17:18.881Z"
+      },
+      {
+        "id": 2,
+        "name": "project_manager",
+        "description": "Project Manager",
+        "isSystemRole": true,
+        "createdAt": "2026-05-08T11:17:18.884Z",
+        "updatedAt": "2026-05-08T11:17:18.884Z"
+      },
+      {
+        "id": 3,
+        "name": "team_lead",
+        "description": "Team Lead",
+        "isSystemRole": true,
+        "createdAt": "2026-05-08T11:17:18.886Z",
+        "updatedAt": "2026-05-08T11:17:18.886Z"
+      },
+      {
+        "id": 4,
+        "name": "developer",
+        "description": "Developer",
+        "isSystemRole": true,
+        "createdAt": "2026-05-08T11:17:18.888Z",
+        "updatedAt": "2026-05-08T11:17:18.888Z"
+      },
+      {
+        "id": 5,
+        "name": "viewer",
+        "description": "Read-only access",
+        "isSystemRole": true,
+        "createdAt": "2026-05-08T11:17:18.891Z",
+        "updatedAt": "2026-05-08T11:17:18.891Z"
+      }
+    ],
+    "Permission": [
+      {
+        "id": 1,
+        "key": "user.create",
+        "name": "Create",
+        "description": "Permission to create",
+        "module": "user",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.705Z"
+      },
+      {
+        "id": 2,
+        "key": "user.read",
+        "name": "Read",
+        "description": "Permission to read",
+        "module": "user",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.710Z"
+      },
+      {
+        "id": 3,
+        "key": "user.update",
+        "name": "Update",
+        "description": "Permission to update",
+        "module": "user",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.714Z"
+      },
+      {
+        "id": 4,
+        "key": "user.delete",
+        "name": "Delete",
+        "description": "Permission to delete",
+        "module": "user",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.717Z"
+      },
+      {
+        "id": 5,
+        "key": "user.assign_role",
+        "name": "Assign Role",
+        "description": "Permission to assign role",
+        "module": "user",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.720Z"
+      },
+      {
+        "id": 6,
+        "key": "user.activate",
+        "name": "Activate",
+        "description": "Permission to activate",
+        "module": "user",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.723Z"
+      },
+      {
+        "id": 7,
+        "key": "user.deactivate",
+        "name": "Deactivate",
+        "description": "Permission to deactivate",
+        "module": "user",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.726Z"
+      },
+      {
+        "id": 8,
+        "key": "team.create",
+        "name": "Create",
+        "description": "Permission to create",
+        "module": "team",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.729Z"
+      },
+      {
+        "id": 9,
+        "key": "team.read",
+        "name": "Read",
+        "description": "Permission to read",
+        "module": "team",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.733Z"
+      },
+      {
+        "id": 10,
+        "key": "team.update",
+        "name": "Update",
+        "description": "Permission to update",
+        "module": "team",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.736Z"
+      },
+      {
+        "id": 11,
+        "key": "team.delete",
+        "name": "Delete",
+        "description": "Permission to delete",
+        "module": "team",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.738Z"
+      },
+      {
+        "id": 12,
+        "key": "team.add_member",
+        "name": "Add Member",
+        "description": "Permission to add member",
+        "module": "team",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.742Z"
+      },
+      {
+        "id": 13,
+        "key": "team.remove_member",
+        "name": "Remove Member",
+        "description": "Permission to remove member",
+        "module": "team",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.745Z"
+      },
+      {
+        "id": 14,
+        "key": "team.assign_project",
+        "name": "Assign Project",
+        "description": "Permission to assign project",
+        "module": "team",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.748Z"
+      },
+      {
+        "id": 15,
+        "key": "team.remove_project",
+        "name": "Remove Project",
+        "description": "Permission to remove project",
+        "module": "team",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.751Z"
+      },
+      {
+        "id": 16,
+        "key": "project.create",
+        "name": "Create",
+        "description": "Permission to create",
+        "module": "project",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.754Z"
+      },
+      {
+        "id": 17,
+        "key": "project.read",
+        "name": "Read",
+        "description": "Permission to read",
+        "module": "project",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.757Z"
+      },
+      {
+        "id": 18,
+        "key": "project.update",
+        "name": "Update",
+        "description": "Permission to update",
+        "module": "project",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.760Z"
+      },
+      {
+        "id": 19,
+        "key": "project.delete",
+        "name": "Delete",
+        "description": "Permission to delete",
+        "module": "project",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.762Z"
+      },
+      {
+        "id": 20,
+        "key": "project.viewAll",
+        "name": "ViewAll",
+        "description": "Permission to viewAll",
+        "module": "project",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.765Z"
+      },
+      {
+        "id": 21,
+        "key": "project.assign_team",
+        "name": "Assign Team",
+        "description": "Permission to assign team",
+        "module": "project",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.768Z"
+      },
+      {
+        "id": 22,
+        "key": "project.remove_team",
+        "name": "Remove Team",
+        "description": "Permission to remove team",
+        "module": "project",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.770Z"
+      },
+      {
+        "id": 23,
+        "key": "project.manage_settings",
+        "name": "Manage Settings",
+        "description": "Permission to manage settings",
+        "module": "project",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.773Z"
+      },
+      {
+        "id": 24,
+        "key": "task.create",
+        "name": "Create",
+        "description": "Permission to create",
+        "module": "task",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.776Z"
+      },
+      {
+        "id": 25,
+        "key": "task.read",
+        "name": "Read",
+        "description": "Permission to read",
+        "module": "task",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.778Z"
+      },
+      {
+        "id": 26,
+        "key": "task.update",
+        "name": "Update",
+        "description": "Permission to update",
+        "module": "task",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.780Z"
+      },
+      {
+        "id": 27,
+        "key": "task.delete",
+        "name": "Delete",
+        "description": "Permission to delete",
+        "module": "task",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.783Z"
+      },
+      {
+        "id": 28,
+        "key": "task.assign",
+        "name": "Assign",
+        "description": "Permission to assign",
+        "module": "task",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.786Z"
+      },
+      {
+        "id": 29,
+        "key": "task.change_status",
+        "name": "Change Status",
+        "description": "Permission to change status",
+        "module": "task",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.790Z"
+      },
+      {
+        "id": 30,
+        "key": "task.change_priority",
+        "name": "Change Priority",
+        "description": "Permission to change priority",
+        "module": "task",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.792Z"
+      },
+      {
+        "id": 31,
+        "key": "dependency.create",
+        "name": "Create",
+        "description": "Permission to create",
+        "module": "dependency",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.795Z"
+      },
+      {
+        "id": 32,
+        "key": "dependency.read",
+        "name": "Read",
+        "description": "Permission to read",
+        "module": "dependency",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.797Z"
+      },
+      {
+        "id": 33,
+        "key": "dependency.update",
+        "name": "Update",
+        "description": "Permission to update",
+        "module": "dependency",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.800Z"
+      },
+      {
+        "id": 34,
+        "key": "dependency.delete",
+        "name": "Delete",
+        "description": "Permission to delete",
+        "module": "dependency",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.803Z"
+      },
+      {
+        "id": 35,
+        "key": "dependency.manual_unblock",
+        "name": "Manual Unblock",
+        "description": "Permission to manual unblock",
+        "module": "dependency",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.805Z"
+      },
+      {
+        "id": 36,
+        "key": "today_task.assign",
+        "name": "Task Assignment",
+        "description": "Access Task Assignment (Today's focus) page and assign tasks to users",
+        "module": "today_task",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.808Z"
+      },
+      {
+        "id": 37,
+        "key": "today_task.remove",
+        "name": "Remove",
+        "description": "Permission to remove",
+        "module": "today_task",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.811Z"
+      },
+      {
+        "id": 38,
+        "key": "today_task.reorder",
+        "name": "Reorder",
+        "description": "Permission to reorder",
+        "module": "today_task",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.813Z"
+      },
+      {
+        "id": 39,
+        "key": "today_task.view_all",
+        "name": "View All",
+        "description": "Permission to view all",
+        "module": "today_task",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.817Z"
+      },
+      {
+        "id": 40,
+        "key": "settings.global.read",
+        "name": "Global.Read",
+        "description": "Permission to global.read",
+        "module": "settings",
+        "category": "global",
+        "createdAt": "2026-05-08T11:17:18.820Z"
+      },
+      {
+        "id": 41,
+        "key": "settings.global.edit",
+        "name": "Global.Edit",
+        "description": "Permission to global.edit",
+        "module": "settings",
+        "category": "global",
+        "createdAt": "2026-05-08T11:17:18.823Z"
+      },
+      {
+        "id": 42,
+        "key": "settings.project.read",
+        "name": "Project.Read",
+        "description": "Permission to project.read",
+        "module": "settings",
+        "category": "project",
+        "createdAt": "2026-05-08T11:17:18.825Z"
+      },
+      {
+        "id": 43,
+        "key": "settings.project.edit",
+        "name": "Project.Edit",
+        "description": "Permission to project.edit",
+        "module": "settings",
+        "category": "project",
+        "createdAt": "2026-05-08T11:17:18.828Z"
+      },
+      {
+        "id": 44,
+        "key": "settings.user.read",
+        "name": "User.Read",
+        "description": "Permission to user.read",
+        "module": "settings",
+        "category": "user",
+        "createdAt": "2026-05-08T11:17:18.830Z"
+      },
+      {
+        "id": 45,
+        "key": "settings.user.edit",
+        "name": "User.Edit",
+        "description": "Permission to user.edit",
+        "module": "settings",
+        "category": "user",
+        "createdAt": "2026-05-08T11:17:18.833Z"
+      },
+      {
+        "id": 46,
+        "key": "notification.view",
+        "name": "View",
+        "description": "Permission to view",
+        "module": "notification",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.836Z"
+      },
+      {
+        "id": 47,
+        "key": "notification.manage",
+        "name": "Manage",
+        "description": "Permission to manage",
+        "module": "notification",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.838Z"
+      },
+      {
+        "id": 48,
+        "key": "notification.configure",
+        "name": "Configure",
+        "description": "Permission to configure",
+        "module": "notification",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.841Z"
+      },
+      {
+        "id": 49,
+        "key": "log.view",
+        "name": "View",
+        "description": "Permission to view",
+        "module": "log",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.844Z"
+      },
+      {
+        "id": 50,
+        "key": "log.export",
+        "name": "Export",
+        "description": "Permission to export",
+        "module": "log",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.847Z"
+      },
+      {
+        "id": 51,
+        "key": "log.view_details",
+        "name": "View Details",
+        "description": "Permission to view details",
+        "module": "log",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.850Z"
+      },
+      {
+        "id": 52,
+        "key": "role.create",
+        "name": "Create",
+        "description": "Permission to create",
+        "module": "role",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.853Z"
+      },
+      {
+        "id": 53,
+        "key": "role.read",
+        "name": "Read",
+        "description": "Permission to read",
+        "module": "role",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.856Z"
+      },
+      {
+        "id": 54,
+        "key": "role.update",
+        "name": "Update",
+        "description": "Permission to update",
+        "module": "role",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.858Z"
+      },
+      {
+        "id": 55,
+        "key": "role.delete",
+        "name": "Delete",
+        "description": "Permission to delete",
+        "module": "role",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.861Z"
+      },
+      {
+        "id": 56,
+        "key": "role.assign",
+        "name": "Assign",
+        "description": "Permission to assign",
+        "module": "role",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.864Z"
+      },
+      {
+        "id": 57,
+        "key": "role.manage_permissions",
+        "name": "Manage Permissions",
+        "description": "Permission to manage permissions",
+        "module": "role",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.867Z"
+      },
+      {
+        "id": 58,
+        "key": "report.view",
+        "name": "View",
+        "description": "Permission to view",
+        "module": "report",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.869Z"
+      },
+      {
+        "id": 59,
+        "key": "report.export",
+        "name": "Export",
+        "description": "Permission to export",
+        "module": "report",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.871Z"
+      },
+      {
+        "id": 60,
+        "key": "report.generate",
+        "name": "Generate",
+        "description": "Permission to generate",
+        "module": "report",
+        "category": null,
+        "createdAt": "2026-05-08T11:17:18.874Z"
+      },
+      {
+        "id": 61,
+        "key": "focus.shift.daily.view",
+        "name": "Daily Shift Sheet",
+        "description": "Access daily shift sheet report for users",
+        "module": "focus",
+        "category": "shift",
+        "createdAt": "2026-05-08T11:17:18.876Z"
+      },
+      {
+        "id": 62,
+        "key": "focus.shift.edit",
+        "name": "Edit Shift Sheet",
+        "description": "Edit daily shift records for users",
+        "module": "focus",
+        "category": "shift",
+        "createdAt": "2026-05-08T11:17:18.878Z"
+      }
+    ],
+    "RolePermission": [
+      {
+        "id": 1,
+        "roleId": 1,
+        "permissionId": 1,
+        "createdAt": "2026-05-08T11:17:18.894Z"
+      },
+      {
+        "id": 2,
+        "roleId": 1,
+        "permissionId": 2,
+        "createdAt": "2026-05-08T11:17:18.898Z"
+      },
+      {
+        "id": 3,
+        "roleId": 1,
+        "permissionId": 3,
+        "createdAt": "2026-05-08T11:17:18.900Z"
+      },
+      {
+        "id": 4,
+        "roleId": 1,
+        "permissionId": 4,
+        "createdAt": "2026-05-08T11:17:18.906Z"
+      },
+      {
+        "id": 5,
+        "roleId": 1,
+        "permissionId": 5,
+        "createdAt": "2026-05-08T11:17:18.910Z"
+      },
+      {
+        "id": 6,
+        "roleId": 1,
+        "permissionId": 6,
+        "createdAt": "2026-05-08T11:17:18.912Z"
+      },
+      {
+        "id": 7,
+        "roleId": 1,
+        "permissionId": 7,
+        "createdAt": "2026-05-08T11:17:18.915Z"
+      },
+      {
+        "id": 8,
+        "roleId": 1,
+        "permissionId": 8,
+        "createdAt": "2026-05-08T11:17:18.918Z"
+      },
+      {
+        "id": 9,
+        "roleId": 1,
+        "permissionId": 9,
+        "createdAt": "2026-05-08T11:17:18.920Z"
+      },
+      {
+        "id": 10,
+        "roleId": 1,
+        "permissionId": 10,
+        "createdAt": "2026-05-08T11:17:18.923Z"
+      },
+      {
+        "id": 11,
+        "roleId": 1,
+        "permissionId": 11,
+        "createdAt": "2026-05-08T11:17:18.925Z"
+      },
+      {
+        "id": 12,
+        "roleId": 1,
+        "permissionId": 12,
+        "createdAt": "2026-05-08T11:17:18.928Z"
+      },
+      {
+        "id": 13,
+        "roleId": 1,
+        "permissionId": 13,
+        "createdAt": "2026-05-08T11:17:18.930Z"
+      },
+      {
+        "id": 14,
+        "roleId": 1,
+        "permissionId": 14,
+        "createdAt": "2026-05-08T11:17:18.933Z"
+      },
+      {
+        "id": 15,
+        "roleId": 1,
+        "permissionId": 15,
+        "createdAt": "2026-05-08T11:17:18.937Z"
+      },
+      {
+        "id": 16,
+        "roleId": 1,
+        "permissionId": 16,
+        "createdAt": "2026-05-08T11:17:18.939Z"
+      },
+      {
+        "id": 17,
+        "roleId": 1,
+        "permissionId": 17,
+        "createdAt": "2026-05-08T11:17:18.941Z"
+      },
+      {
+        "id": 18,
+        "roleId": 1,
+        "permissionId": 18,
+        "createdAt": "2026-05-08T11:17:18.943Z"
+      },
+      {
+        "id": 19,
+        "roleId": 1,
+        "permissionId": 19,
+        "createdAt": "2026-05-08T11:17:18.946Z"
+      },
+      {
+        "id": 20,
+        "roleId": 1,
+        "permissionId": 20,
+        "createdAt": "2026-05-08T11:17:18.948Z"
+      },
+      {
+        "id": 21,
+        "roleId": 1,
+        "permissionId": 21,
+        "createdAt": "2026-05-08T11:17:18.951Z"
+      },
+      {
+        "id": 22,
+        "roleId": 1,
+        "permissionId": 22,
+        "createdAt": "2026-05-08T11:17:18.953Z"
+      },
+      {
+        "id": 23,
+        "roleId": 1,
+        "permissionId": 23,
+        "createdAt": "2026-05-08T11:17:18.956Z"
+      },
+      {
+        "id": 24,
+        "roleId": 1,
+        "permissionId": 24,
+        "createdAt": "2026-05-08T11:17:18.958Z"
+      },
+      {
+        "id": 25,
+        "roleId": 1,
+        "permissionId": 25,
+        "createdAt": "2026-05-08T11:17:18.960Z"
+      },
+      {
+        "id": 26,
+        "roleId": 1,
+        "permissionId": 26,
+        "createdAt": "2026-05-08T11:17:18.962Z"
+      },
+      {
+        "id": 27,
+        "roleId": 1,
+        "permissionId": 27,
+        "createdAt": "2026-05-08T11:17:18.965Z"
+      },
+      {
+        "id": 28,
+        "roleId": 1,
+        "permissionId": 28,
+        "createdAt": "2026-05-08T11:17:18.968Z"
+      },
+      {
+        "id": 29,
+        "roleId": 1,
+        "permissionId": 29,
+        "createdAt": "2026-05-08T11:17:18.970Z"
+      },
+      {
+        "id": 30,
+        "roleId": 1,
+        "permissionId": 30,
+        "createdAt": "2026-05-08T11:17:18.972Z"
+      },
+      {
+        "id": 31,
+        "roleId": 1,
+        "permissionId": 31,
+        "createdAt": "2026-05-08T11:17:18.974Z"
+      },
+      {
+        "id": 32,
+        "roleId": 1,
+        "permissionId": 32,
+        "createdAt": "2026-05-08T11:17:18.977Z"
+      },
+      {
+        "id": 33,
+        "roleId": 1,
+        "permissionId": 33,
+        "createdAt": "2026-05-08T11:17:18.979Z"
+      },
+      {
+        "id": 34,
+        "roleId": 1,
+        "permissionId": 34,
+        "createdAt": "2026-05-08T11:17:18.982Z"
+      },
+      {
+        "id": 35,
+        "roleId": 1,
+        "permissionId": 35,
+        "createdAt": "2026-05-08T11:17:18.984Z"
+      },
+      {
+        "id": 36,
+        "roleId": 1,
+        "permissionId": 36,
+        "createdAt": "2026-05-08T11:17:18.987Z"
+      },
+      {
+        "id": 37,
+        "roleId": 1,
+        "permissionId": 37,
+        "createdAt": "2026-05-08T11:17:18.989Z"
+      },
+      {
+        "id": 38,
+        "roleId": 1,
+        "permissionId": 38,
+        "createdAt": "2026-05-08T11:17:18.992Z"
+      },
+      {
+        "id": 39,
+        "roleId": 1,
+        "permissionId": 39,
+        "createdAt": "2026-05-08T11:17:18.995Z"
+      },
+      {
+        "id": 40,
+        "roleId": 1,
+        "permissionId": 40,
+        "createdAt": "2026-05-08T11:17:18.997Z"
+      },
+      {
+        "id": 41,
+        "roleId": 1,
+        "permissionId": 41,
+        "createdAt": "2026-05-08T11:17:19.000Z"
+      },
+      {
+        "id": 42,
+        "roleId": 1,
+        "permissionId": 42,
+        "createdAt": "2026-05-08T11:17:19.002Z"
+      },
+      {
+        "id": 43,
+        "roleId": 1,
+        "permissionId": 43,
+        "createdAt": "2026-05-08T11:17:19.005Z"
+      },
+      {
+        "id": 44,
+        "roleId": 1,
+        "permissionId": 44,
+        "createdAt": "2026-05-08T11:17:19.008Z"
+      },
+      {
+        "id": 45,
+        "roleId": 1,
+        "permissionId": 45,
+        "createdAt": "2026-05-08T11:17:19.010Z"
+      },
+      {
+        "id": 46,
+        "roleId": 1,
+        "permissionId": 46,
+        "createdAt": "2026-05-08T11:17:19.012Z"
+      },
+      {
+        "id": 47,
+        "roleId": 1,
+        "permissionId": 47,
+        "createdAt": "2026-05-08T11:17:19.014Z"
+      },
+      {
+        "id": 48,
+        "roleId": 1,
+        "permissionId": 48,
+        "createdAt": "2026-05-08T11:17:19.016Z"
+      },
+      {
+        "id": 49,
+        "roleId": 1,
+        "permissionId": 49,
+        "createdAt": "2026-05-08T11:17:19.019Z"
+      },
+      {
+        "id": 50,
+        "roleId": 1,
+        "permissionId": 50,
+        "createdAt": "2026-05-08T11:17:19.022Z"
+      },
+      {
+        "id": 51,
+        "roleId": 1,
+        "permissionId": 51,
+        "createdAt": "2026-05-08T11:17:19.025Z"
+      },
+      {
+        "id": 52,
+        "roleId": 1,
+        "permissionId": 52,
+        "createdAt": "2026-05-08T11:17:19.027Z"
+      },
+      {
+        "id": 53,
+        "roleId": 1,
+        "permissionId": 53,
+        "createdAt": "2026-05-08T11:17:19.029Z"
+      },
+      {
+        "id": 54,
+        "roleId": 1,
+        "permissionId": 54,
+        "createdAt": "2026-05-08T11:17:19.032Z"
+      },
+      {
+        "id": 55,
+        "roleId": 1,
+        "permissionId": 55,
+        "createdAt": "2026-05-08T11:17:19.035Z"
+      },
+      {
+        "id": 56,
+        "roleId": 1,
+        "permissionId": 56,
+        "createdAt": "2026-05-08T11:17:19.039Z"
+      },
+      {
+        "id": 57,
+        "roleId": 1,
+        "permissionId": 57,
+        "createdAt": "2026-05-08T11:17:19.042Z"
+      },
+      {
+        "id": 58,
+        "roleId": 1,
+        "permissionId": 58,
+        "createdAt": "2026-05-08T11:17:19.045Z"
+      },
+      {
+        "id": 59,
+        "roleId": 1,
+        "permissionId": 59,
+        "createdAt": "2026-05-08T11:17:19.047Z"
+      },
+      {
+        "id": 60,
+        "roleId": 1,
+        "permissionId": 60,
+        "createdAt": "2026-05-08T11:17:19.050Z"
+      },
+      {
+        "id": 61,
+        "roleId": 1,
+        "permissionId": 61,
+        "createdAt": "2026-05-08T11:17:19.052Z"
+      },
+      {
+        "id": 62,
+        "roleId": 1,
+        "permissionId": 62,
+        "createdAt": "2026-05-08T11:17:19.055Z"
+      },
+      {
+        "id": 63,
+        "roleId": 3,
+        "permissionId": 36,
+        "createdAt": "2026-05-08T11:17:19.061Z"
+      },
+      {
+        "id": 64,
+        "roleId": 3,
+        "permissionId": 37,
+        "createdAt": "2026-05-08T11:17:19.063Z"
+      },
+      {
+        "id": 65,
+        "roleId": 3,
+        "permissionId": 38,
+        "createdAt": "2026-05-08T11:17:19.066Z"
+      },
+      {
+        "id": 66,
+        "roleId": 3,
+        "permissionId": 39,
+        "createdAt": "2026-05-08T11:17:19.068Z"
+      },
+      {
+        "id": 67,
+        "roleId": 2,
+        "permissionId": 61,
+        "createdAt": "2026-05-08T11:17:19.071Z"
+      },
+      {
+        "id": 68,
+        "roleId": 2,
+        "permissionId": 62,
+        "createdAt": "2026-05-08T11:17:19.073Z"
+      },
+      {
+        "id": 69,
+        "roleId": 4,
+        "permissionId": 40,
+        "createdAt": "2026-05-08T11:17:19.077Z"
+      }
+    ],
+    "UserRole": [
+      {
+        "id": 1,
+        "userId": 1,
+        "roleId": 1,
+        "scopeType": "global",
+        "scopeId": null,
+        "assignedAt": "2026-05-08T11:17:19.165Z",
+        "assignedBy": null
+      }
+    ],
+    "ProjectType": [
+      {
+        "id": 1,
+        "name": "Backend API",
+        "description": "Backend and API development projects",
+        "isActive": true,
+        "displayOrder": 3,
+        "color": "#8b5cf6",
+        "icon": "server",
+        "createdAt": "2026-05-08T11:17:18.657Z",
+        "updatedAt": "2026-05-08T11:17:18.657Z"
+      },
+      {
+        "id": 2,
+        "name": "Web Development",
+        "description": "Web application development projects",
+        "isActive": true,
+        "displayOrder": 1,
+        "color": "#3b82f6",
+        "icon": "globe",
+        "createdAt": "2026-05-08T11:17:18.657Z",
+        "updatedAt": "2026-05-08T11:17:18.657Z"
+      },
+      {
+        "id": 3,
+        "name": "UI/UX Design",
+        "description": "Design and user experience projects",
+        "isActive": true,
+        "displayOrder": 4,
+        "color": "#f59e0b",
+        "icon": "palette",
+        "createdAt": "2026-05-08T11:17:18.657Z",
+        "updatedAt": "2026-05-08T11:17:18.657Z"
+      },
+      {
+        "id": 4,
+        "name": "Mobile Development",
+        "description": "Mobile application development projects",
+        "isActive": true,
+        "displayOrder": 2,
+        "color": "#10b981",
+        "icon": "smartphone",
+        "createdAt": "2026-05-08T11:17:18.657Z",
+        "updatedAt": "2026-05-08T11:17:18.657Z"
+      }
+    ],
+    "ProjectStatus": [
+      {
+        "id": 1,
+        "name": "Urgent",
+        "color": "#ef4444",
+        "isDefault": false,
+        "isFinal": false,
+        "isUrgent": true,
+        "orderIndex": 4,
+        "isActive": true,
+        "createdAt": "2026-05-08T11:17:18.687Z",
+        "updatedAt": "2026-05-08T11:17:18.687Z"
+      },
+      {
+        "id": 2,
+        "name": "Planning",
+        "color": "#6b7280",
+        "isDefault": true,
+        "isFinal": false,
+        "isUrgent": false,
+        "orderIndex": 1,
+        "isActive": true,
+        "createdAt": "2026-05-08T11:17:18.687Z",
+        "updatedAt": "2026-05-08T11:17:18.687Z"
+      },
+      {
+        "id": 3,
+        "name": "In Progress",
+        "color": "#3b82f6",
+        "isDefault": false,
+        "isFinal": false,
+        "isUrgent": false,
+        "orderIndex": 2,
+        "isActive": true,
+        "createdAt": "2026-05-08T11:17:18.687Z",
+        "updatedAt": "2026-05-08T11:17:18.687Z"
+      },
+      {
+        "id": 4,
+        "name": "On Hold",
+        "color": "#f59e0b",
+        "isDefault": false,
+        "isFinal": false,
+        "isUrgent": false,
+        "orderIndex": 3,
+        "isActive": true,
+        "createdAt": "2026-05-08T11:17:18.687Z",
+        "updatedAt": "2026-05-08T11:17:18.687Z"
+      },
+      {
+        "id": 5,
+        "name": "Cancelled",
+        "color": "#6b7280",
+        "isDefault": false,
+        "isFinal": true,
+        "isUrgent": false,
+        "orderIndex": 6,
+        "isActive": true,
+        "createdAt": "2026-05-08T11:17:18.687Z",
+        "updatedAt": "2026-05-08T11:17:18.687Z"
+      },
+      {
+        "id": 6,
+        "name": "Completed",
+        "color": "#10b981",
+        "isDefault": false,
+        "isFinal": true,
+        "isUrgent": false,
+        "orderIndex": 5,
+        "isActive": true,
+        "createdAt": "2026-05-08T11:17:18.687Z",
+        "updatedAt": "2026-05-08T11:17:18.687Z"
+      }
+    ],
+    "TaskStatus": [
+      {
+        "id": 1,
+        "name": "Pending",
+        "color": "#6b7280",
+        "isDefault": true,
+        "isFinal": false,
+        "isBlocking": false,
+        "orderIndex": 1,
+        "isActive": true,
+        "createdAt": "2026-05-08T11:17:18.699Z",
+        "updatedAt": "2026-05-08T11:17:18.699Z"
+      },
+      {
+        "id": 2,
+        "name": "Cancelled",
+        "color": "#6b7280",
+        "isDefault": false,
+        "isFinal": true,
+        "isBlocking": false,
+        "orderIndex": 6,
+        "isActive": true,
+        "createdAt": "2026-05-08T11:17:18.699Z",
+        "updatedAt": "2026-05-08T11:17:18.699Z"
+      },
+      {
+        "id": 3,
+        "name": "In Review",
+        "color": "#f59e0b",
+        "isDefault": false,
+        "isFinal": false,
+        "isBlocking": false,
+        "orderIndex": 3,
+        "isActive": true,
+        "createdAt": "2026-05-08T11:17:18.699Z",
+        "updatedAt": "2026-05-08T11:17:18.699Z"
+      },
+      {
+        "id": 4,
+        "name": "Completed",
+        "color": "#10b981",
+        "isDefault": false,
+        "isFinal": true,
+        "isBlocking": false,
+        "orderIndex": 5,
+        "isActive": true,
+        "createdAt": "2026-05-08T11:17:18.699Z",
+        "updatedAt": "2026-05-08T11:17:18.699Z"
+      },
+      {
+        "id": 5,
+        "name": "In Progress",
+        "color": "#3b82f6",
+        "isDefault": false,
+        "isFinal": false,
+        "isBlocking": false,
+        "orderIndex": 2,
+        "isActive": true,
+        "createdAt": "2026-05-08T11:17:18.699Z",
+        "updatedAt": "2026-05-08T11:17:18.699Z"
+      },
+      {
+        "id": 6,
+        "name": "Blocked",
+        "color": "#ef4444",
+        "isDefault": false,
+        "isFinal": false,
+        "isBlocking": true,
+        "orderIndex": 4,
+        "isActive": true,
+        "createdAt": "2026-05-08T11:17:18.699Z",
+        "updatedAt": "2026-05-08T11:17:18.699Z"
+      }
+    ],
+    "StatSnapshot": [],
+    "ProductivitySnapshot": [],
+    "ForecastSnapshot": []
+  }
+}

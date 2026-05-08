@@ -27,7 +27,22 @@
     "test:change-password": "node scripts/test-change-password.js",
     "script:validate-seed-safety": "node scripts/validate-seed-safety.js",
     "script:export-data": "node scripts/export-business-data.js",
-    "script:db:backup-migrate-restore": "node scripts/backup-migrate-restore.js"
+    "script:db:backup-migrate-restore": "node scripts/backup-migrate-restore.js --format=json --mode=deploy --skip-git",
+    "script:db:backup-migrate-restore:sql": "node scripts/backup-migrate-restore.js --format=sql --mode=deploy --skip-git",
+    "script:server:update-db": "node scripts/backup-migrate-restore.js",
+    "script:server:update-db:deploy": "node scripts/backup-migrate-restore.js --mode=deploy",
+    "script:server:update-db:deploy:skip-git": "node scripts/backup-migrate-restore.js --mode=deploy --skip-git",
+    "script:server:update-db:deploy:prod": "node scripts/backup-migrate-restore.js --mode=deploy --allow-production",
+    "script:server:update-db:reset:prod": "node scripts/backup-migrate-restore.js --mode=reset --allow-production",
+    "script:db:backup-only": "node scripts/backup-migrate-restore.js --backup-only --skip-git",
+    "script:db:restore-only": "node scripts/backup-migrate-restore.js --restore-only --skip-git",
+    "script:db:backup-json-only": "node scripts/backup-migrate-restore.js --format=json --backup-only --skip-git",
+    "script:db:restore-json-only": "node scripts/backup-migrate-restore.js --format=json --restore-only --skip-git",
+    "script:server:update-db:json:deploy": "node scripts/backup-migrate-restore.js --format=json --mode=deploy",
+    "script:server:update-db:json:deploy:prod": "node scripts/backup-migrate-restore.js --format=json --mode=deploy --allow-production",
+    "script:server:update-db:json:reset:prod": "node scripts/backup-migrate-restore.js --format=json --mode=reset --allow-production",
+    "db:backup": "node scripts/backup-migrate-restore.js --format=json --backup-only --skip-git",
+    "db:restore": "node scripts/backup-migrate-restore.js --format=json --restore-only --skip-git"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.7.0",

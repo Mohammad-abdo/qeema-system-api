@@ -19,8 +19,41 @@
 
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
+const mysql = require('mysql2/promise');
 const { getAllPermissions } = require('./seed-shared');
-const prisma = new PrismaClient();
+
+let prisma;
+
+async function ensureDatabaseExists() {
+    const dbUrl = process.env.DATABASE_URL;
+    if (!dbUrl) {
+        throw new Error('DATABASE_URL is not set. Please configure it in backend/.env');
+    }
+
+    // Prisma (MySQL) will not create the database automatically.
+    const url = new URL(dbUrl);
+    const database = (url.pathname || '').replace(/^\//, '');
+
+    if (!database) {
+        throw new Error('DATABASE_URL does not include a database name (e.g. .../pms).');
+    }
+
+    const connection = await mysql.createConnection({
+        host: url.hostname,
+        port: url.port ? Number(url.port) : 3306,
+        user: decodeURIComponent(url.username || ''),
+        password: decodeURIComponent(url.password || ''),
+        multipleStatements: false,
+    });
+
+    try {
+        await connection.query(
+            `CREATE DATABASE IF NOT EXISTS \`${database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`
+        );
+    } finally {
+        await connection.end();
+    }
+}
 
 // ─── Main Function ──────────────────────────────────────────────────────
 async function main() {
@@ -31,6 +64,9 @@ async function main() {
         console.error('   Use: npm run seed:prod:safe  for production-safe idempotent bootstrap.');
         process.exit(1);
     }
+
+    await ensureDatabaseExists();
+    prisma = new PrismaClient();
 
     // 1) Clear old data (local/dev only - guarded above in production)
     console.log('🗑️  Clearing old data...');
@@ -474,5 +510,7 @@ main()
         process.exit(1);
     })
     .finally(async () => {
-        await prisma.$disconnect();
+        if (prisma) {
+            await prisma.$disconnect();
+        }
     });

@@ -26,7 +26,8 @@
     "script:audit-rbac-bypasses": "node scripts/audit-rbac-bypasses.js",
     "test:change-password": "node scripts/test-change-password.js",
     "script:validate-seed-safety": "node scripts/validate-seed-safety.js",
-    "script:export-data": "node scripts/export-business-data.js"
+    "script:export-data": "node scripts/export-business-data.js",
+    "script:db:backup-migrate-restore": "node scripts/backup-migrate-restore.js"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.7.0",

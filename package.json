@@ -42,7 +42,8 @@
     "script:server:update-db:json:deploy:prod": "node scripts/backup-migrate-restore.js --format=json --mode=deploy --allow-production",
     "script:server:update-db:json:reset:prod": "node scripts/backup-migrate-restore.js --format=json --mode=reset --allow-production",
     "db:backup": "node scripts/backup-migrate-restore.js --format=json --backup-only --skip-git",
-    "db:restore": "node scripts/backup-migrate-restore.js --format=json --restore-only --skip-git"
+    "db:restore": "node scripts/backup-migrate-restore.js --format=json --restore-only --skip-git",
+    "db:snapshot": "node scripts/db-snapshot.js"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.7.0",

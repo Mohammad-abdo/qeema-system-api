@@ -32,6 +32,13 @@
  * - --db-host / MYSQL_HOST
  * - --db-port / MYSQL_PORT
  *
+ * Backup filename:
+ * - Default: <db>_latest.json (format=json) or <db>_latest.sql (format=sql)
+ * - Override extension: --backup-ext=bak or env BACKUP_EXT=bak → <db>_latest.bak
+ *
+ * Restore safety:
+ * - If backup database name ≠ DATABASE_URL database, restore aborts unless --allow-db-mismatch
+ *
  * Modes:
  * - deploy: `prisma migrate deploy` (recommended for production)
  * - reset : `prisma migrate reset --force` (DANGEROUS; usually NOT for prod)
@@ -42,7 +49,17 @@ const path = require('path');
 const fs = require('fs');
 const { spawnSync } = require('child_process');
 
+const {
+  prismaJsonReplacer,
+  prismaJsonReviver,
+  atomicWriteFile,
+  parseMysqlDatabaseUrl,
+  validatePrismaBackupPayload,
+} = require('./db-backup-helpers');
+
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+
+const MAX_JSON_BACKUP_BYTES = 500 * 1024 * 1024;
 
 function readArg(name, fallback) {
   const prefix = `--${name}=`;
@@ -52,6 +69,14 @@ function readArg(name, fallback) {
 
 function hasFlag(name) {
   return process.argv.includes(`--${name}`);
+}
+
+/** @param {string|null|undefined} raw */
+function normalizeBackupExt(raw) {
+  if (raw == null || String(raw).trim() === '') return null;
+  const e = String(raw).trim();
+  if (e === 'default') return null;
+  return e.startsWith('.') ? e : `.${e}`;
 }
 
 function resolveMysqlTool(toolName) {
@@ -106,20 +131,6 @@ function run(cmd, args, options = {}) {
   }
 }
 
-function parseDatabaseUrl(dbUrl) {
-  const url = new URL(dbUrl);
-  const database = (url.pathname || '').replace(/^\//, '');
-  if (!database) throw new Error('DATABASE_URL is missing database name (e.g. .../pms).');
-
-  return {
-    host: url.hostname,
-    port: url.port ? Number(url.port) : 3306,
-    user: decodeURIComponent(url.username || ''),
-    password: decodeURIComponent(url.password || ''),
-    database,
-  };
-}
-
 function runCapture(cmd, args, options = {}) {
   const res = spawnSync(cmd, args, {
     stdio: 'pipe',
@@ -165,11 +176,16 @@ function formatTimestamp(d = new Date()) {
 }
 
 async function main() {
-  const format = readArg('format', 'sql'); // sql | json
-  const mode = readArg('mode', 'deploy');
+  const format = String(readArg('format', 'sql') || 'sql')
+    .trim()
+    .toLowerCase();
+  const mode = String(readArg('mode', 'deploy') || 'deploy')
+    .trim()
+    .toLowerCase();
   const allowProduction = hasFlag('allow-production');
   const skipGit = hasFlag('skip-git');
   const allowDirty = hasFlag('allow-dirty');
+  const allowDbMismatch = hasFlag('allow-db-mismatch');
   const overrideDbPassword = readArg('db-password', null) || process.env.MYSQL_PASSWORD || null;
   const overrideDbUser = readArg('db-user', null) || process.env.MYSQL_USER || null;
   const overrideDbHost = readArg('db-host', null) || process.env.MYSQL_HOST || null;
@@ -180,6 +196,13 @@ async function main() {
 
   if (backupOnly && restoreOnly) {
     throw new Error('Use only one of: --backup-only OR --restore-only');
+  }
+
+  if (format !== 'sql' && format !== 'json') {
+    throw new Error(`Invalid --format=${format}. Use sql|json`);
+  }
+  if (!['deploy', 'reset', 'push'].includes(mode)) {
+    throw new Error(`Invalid --mode=${mode}. Use deploy|reset|push`);
   }
 
   if (process.env.NODE_ENV === 'production' && !allowProduction) {
@@ -222,7 +245,7 @@ async function main() {
     }
   }
 
-  const parsed = parseDatabaseUrl(dbUrl);
+  const parsed = parseMysqlDatabaseUrl(dbUrl);
   const host = overrideDbHost !== null ? String(overrideDbHost) : parsed.host;
   const port =
     overrideDbPortRaw !== null && String(overrideDbPortRaw).trim() !== ''
@@ -237,11 +260,12 @@ async function main() {
   const backupsDir = path.join(__dirname, '..', 'backups');
   fs.mkdirSync(backupsDir, { recursive: true });
 
+  const backupExtOverride = normalizeBackupExt(readArg('backup-ext', null) || process.env.BACKUP_EXT || null);
+  const defaultLatestExt = format === 'json' ? '.json' : '.sql';
+  const latestExt = backupExtOverride || defaultLatestExt;
+
   // Single "latest" backup file (overwritten each time)
-  const latestFile =
-    format === 'json'
-      ? path.join(backupsDir, `${database}_latest.json`)
-      : path.join(backupsDir, `${database}_latest.sql`);
+  const latestFile = path.join(backupsDir, `${database}_latest${latestExt}`);
   const dumpFile = dumpFileArg ? path.resolve(dumpFileArg) : latestFile;
 
   console.log(`🧰 Mode: ${mode}`);
@@ -254,7 +278,17 @@ async function main() {
     if (skipGit) return { skipped: true, reason: '--skip-git' };
 
     console.log('1/5) ⬇️  Pulling latest code (git pull)...');
-    const status = runCapture('git', ['status', '--porcelain'], { cwd: repoRoot });
+    try {
+      runCapture('git', ['rev-parse', '--is-inside-work-tree'], { cwd: repoRoot });
+    } catch {
+      return { skipped: true, reason: 'not a git repository (or git unavailable)' };
+    }
+    let status = '';
+    try {
+      status = runCapture('git', ['status', '--porcelain'], { cwd: repoRoot });
+    } catch (e) {
+      return { skipped: true, reason: `git status failed: ${e && e.message ? e.message : e}` };
+    }
     if (status.trim() && !allowDirty) {
       throw new Error(
         'Working tree has local changes. Commit/stash them or re-run with --allow-dirty (not recommended on servers).'
@@ -291,6 +325,10 @@ async function main() {
       ];
       if (password) dumpArgs.splice(3, 0, `--password=${password}`);
       run(resolveMysqlTool('mysqldump'), dumpArgs);
+      const st = fs.statSync(dumpFile);
+      if (!st.size) {
+        throw new Error('SQL backup file is empty (0 bytes). Check DB credentials and permissions.');
+      }
       console.log('✅ Backup created.\n');
       return;
     }
@@ -298,23 +336,47 @@ async function main() {
     if (format === 'json') {
       console.log('2/5) 📦 Creating Prisma JSON backup...');
       const { PrismaClient, Prisma } = require('@prisma/client');
+      const models = Prisma?.dmmf?.datamodel?.models || [];
+      if (models.length === 0) {
+        throw new Error(
+          'Prisma has no models in DMMF. Run: npx prisma generate --schema=./prisma/schema.prisma then retry.'
+        );
+      }
       const prisma = new PrismaClient();
       try {
-        const models = Prisma?.dmmf?.datamodel?.models || [];
+        await prisma.$connect();
+        await prisma.$queryRawUnsafe('SELECT 1');
         const data = {};
         for (const m of models) {
           const delegate = prisma[lowerFirst(m.name)];
           if (!delegate || typeof delegate.findMany !== 'function') continue;
-          data[m.name] = await delegate.findMany();
+          try {
+            data[m.name] = await delegate.findMany();
+          } catch (e) {
+            throw new Error(
+              `Backup failed on model "${m.name}": ${e && e.message ? e.message : e}`
+            );
+          }
+        }
+        const modelCount = Object.keys(data).length;
+        if (modelCount === 0) {
+          throw new Error('Backup produced zero models (unexpected). Check Prisma client generation.');
         }
         const payload = {
           format: 'prisma-json-backup',
           database,
           exportedAt: new Date().toISOString(),
-          modelCount: Object.keys(data).length,
+          modelCount,
           data,
         };
-        fs.writeFileSync(dumpFile, JSON.stringify(payload, null, 2), 'utf8');
+        const json = JSON.stringify(payload, prismaJsonReplacer, 2);
+        atomicWriteFile(dumpFile, json);
+        const outSz = fs.statSync(dumpFile).size;
+        if (outSz > MAX_JSON_BACKUP_BYTES) {
+          console.warn(
+            `⚠️  Backup file is large (${Math.round(outSz / 1024 / 1024)}MB). Consider SQL dumps for very large DBs.`
+          );
+        }
       } finally {
         await prisma.$disconnect();
       }
@@ -408,16 +470,43 @@ async function main() {
 
     if (format === 'json') {
       console.log('🔁 Restoring from Prisma JSON backup...');
-      const payload = JSON.parse(fs.readFileSync(dumpFile, 'utf8'));
-      if (!payload || payload.format !== 'prisma-json-backup' || !payload.data) {
-        throw new Error('Invalid JSON backup file format.');
+      const st = fs.statSync(dumpFile);
+      if (!st.size) {
+        throw new Error('Backup file is empty (0 bytes).');
       }
-      const { PrismaClient, Prisma } = require('@prisma/client');
-      const prisma = new PrismaClient();
+      if (st.size > MAX_JSON_BACKUP_BYTES) {
+        throw new Error(
+          `Backup file too large (${Math.round(st.size / 1024 / 1024)}MB). Max ${MAX_JSON_BACKUP_BYTES} bytes.`
+        );
+      }
+      let payload;
       try {
-        await prisma.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0;');
+        payload = JSON.parse(fs.readFileSync(dumpFile, 'utf8'), prismaJsonReviver);
+      } catch (e) {
+        throw new Error(`Invalid JSON in backup file: ${e && e.message ? e.message : e}`);
+      }
+      validatePrismaBackupPayload(payload, database, allowDbMismatch);
 
-        const models = Prisma?.dmmf?.datamodel?.models || [];
+      const { PrismaClient, Prisma } = require('@prisma/client');
+      const models = Prisma?.dmmf?.datamodel?.models || [];
+      if (models.length === 0) {
+        throw new Error('Prisma has no models in DMMF. Run: npx prisma generate before restore.');
+      }
+      const currentNames = new Set(models.map((m) => m.name));
+      const backupNames = new Set(Object.keys(payload.data));
+      for (const n of backupNames) {
+        if (!currentNames.has(n)) {
+          console.warn(`⚠️  Backup contains model "${n}" not in current schema — skipped (run older client or migrate).`);
+        }
+      }
+
+      const prisma = new PrismaClient();
+      let fkOff = false;
+      try {
+        await prisma.$connect();
+        await prisma.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0;');
+        fkOff = true;
+
         for (const m of models) {
           const delegate = prisma[lowerFirst(m.name)];
           if (!delegate || typeof delegate.deleteMany !== 'function') continue;
@@ -433,12 +522,24 @@ async function main() {
           const chunkSize = 500;
           for (let i = 0; i < rows.length; i += chunkSize) {
             const chunk = rows.slice(i, i + chunkSize);
-            await delegate.createMany({ data: chunk });
+            try {
+              await delegate.createMany({ data: chunk });
+            } catch (e) {
+              const code = e && e.code ? e.code : '';
+              throw new Error(
+                `Restore failed on model "${m.name}" chunk ${i}-${i + chunk.length}: ${e && e.message ? e.message : e}${code ? ` (${code})` : ''}`
+              );
+            }
           }
         }
-
-        await prisma.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1;');
       } finally {
+        if (fkOff) {
+          try {
+            await prisma.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1;');
+          } catch {
+            // ignore
+          }
+        }
         await prisma.$disconnect();
       }
       console.log('✅ JSON restore done.\n');

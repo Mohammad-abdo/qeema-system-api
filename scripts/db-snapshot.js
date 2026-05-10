@@ -59,7 +59,9 @@ async function main() {
 
   const outArg = readArg('out', null);
   const ext = normalizeExt(readArg('backup-ext', process.env.BACKUP_EXT || null));
-  const outFile = outArg ? path.resolve(outArg) : path.join(backupsDir, `${database}_latest${ext}`);
+  const outFile = outArg
+    ? path.resolve(outArg)
+    : path.join(backupsDir, `${database}_latest.snapshot${ext}`);
 
   const { PrismaClient, Prisma } = require('@prisma/client');
   const models = Prisma?.dmmf?.datamodel?.models || [];

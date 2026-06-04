@@ -9,6 +9,7 @@
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "prisma:generate": "prisma generate --schema=./prisma/schema.prisma",
+    "prisma:generate:safe": "node scripts/prisma-generate-safe.js",
     "deploy:db": "node scripts/prisma-production-guard.js migrate deploy",
     "prisma:prod": "node scripts/prisma-production-guard.js",
     "prisma:seed": "node prisma/seed.js",

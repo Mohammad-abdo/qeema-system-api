@@ -33,6 +33,7 @@ const rbacRouter = require("./routes/rbac");
 const attachmentsRouter = require("./routes/attachments");
 const searchRouter = require("./routes/search");
 const reportsRouter = require("./routes/reports");
+const dataPortabilityRouter = require("./routes/dataPortability");
 
 const app = express();
 const PORT = Number(process.env.PORT) || 4000;
@@ -44,9 +45,11 @@ const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS) || 30000;
 // Override: set CORS_STRICT=1 to use only env-listed origins (no defaults).
 const defaultOrigins = [
   "http://localhost:3000",
+  "http://localhost:3001",
   "http://localhost:5173",
   "http://127.0.0.1:3000",
   "http://127.0.0.1:5173",
+  "http://127.0.0.1:3001",
   "https://qeemasupport.site",
   "https://www.qeemasupport.site",
 ];
@@ -133,6 +136,7 @@ app.use("/api/v1", rbacRouter);
 app.use("/api/v1", attachmentsRouter);
 app.use("/api/v1", searchRouter);
 app.use("/api/v1/reports", reportsRouter);
+app.use("/api/v1", dataPortabilityRouter);
 
 if (process.env.SENTRY_DSN && Sentry) {
   app.use(Sentry.Handlers.errorHandler());
@@ -164,8 +168,18 @@ const server = app.listen(PORT, () => {
         logger.error("Focus rollover reminder job failed", { error: e.message });
       }
     });
+
+    // Daily database backup job
+    const { runDailyBackupJob } = require("./controllers/dataPortabilityController");
+    cron.schedule("0 0 * * *", async () => {
+      try {
+        await runDailyBackupJob();
+      } catch (e) {
+        logger.error("Daily database backup job failed", { error: e.message });
+      }
+    });
   } catch (e) {
-    logger.warn("Focus rollover reminder cron not started", { error: e.message });
+    logger.warn("Crons not fully started", { error: e.message });
   }
 });
 server.timeout = REQUEST_TIMEOUT_MS;

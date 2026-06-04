@@ -93,7 +93,6 @@ async function projectsReport(req, res) {
           id: true,
           name: true,
           projectStatusId: true,
-          status: true,
           priority: true,
           startDate: true,
           endDate: true,
@@ -102,7 +101,7 @@ async function projectsReport(req, res) {
         orderBy: { name: "asc" },
       }),
       prisma.projectPhase.findMany({
-        where: { project: projectsWhere, status: { not: "completed" } },
+        where: { project: projectsWhere, status: { not: "completed" } }, // ProjectPhase.status (not Task)
         select: { projectId: true, name: true, endDate: true, status: true },
         orderBy: { endDate: "asc" },
       }),
@@ -133,7 +132,7 @@ async function projectsReport(req, res) {
           dueDate: { lt: today },
           OR: [
             { taskStatusId: { not: null }, taskStatus: { isFinal: false } },
-            { status: { not: "completed" }, taskStatusId: null },
+            { taskStatusId: null },
           ],
         },
         _count: { id: true },
@@ -143,7 +142,6 @@ async function projectsReport(req, res) {
           ...tasksWhereForProjects,
           OR: [
             { taskStatus: { isBlocking: true } },
-            { status: "waiting", taskStatusId: null },
           ],
         },
       }).then((c) => ({ total: c })).catch(() => ({ total: 0 })),
@@ -153,7 +151,6 @@ async function projectsReport(req, res) {
           ...tasksWhereForProjects,
           OR: [
             { taskStatus: { isBlocking: true } },
-            { status: "waiting", taskStatusId: null },
           ],
         },
         _count: { id: true },
@@ -165,7 +162,6 @@ async function projectsReport(req, res) {
           OR: [
             { taskStatus: { isFinal: true } },
             { completedAt: { not: null } },
-            { status: "completed", taskStatusId: null },
           ],
         },
         _count: { id: true },
@@ -253,7 +249,7 @@ async function projectsReport(req, res) {
       return {
         id: p.id,
         name: p.name,
-        status: p.projectStatus?.name ?? p.status ?? "—",
+        status: p.projectStatus?.name ?? "—",
         statusId: p.projectStatusId,
         priority: p.priority,
         endDate: p.endDate,
@@ -279,8 +275,8 @@ async function projectsReport(req, res) {
     }).length;
     const delayedCount = projectList.filter((p) => p.riskFlags.includes("past_end_date")).length;
     const onHoldCount = projects.filter((p) => {
-      const name = (p.projectStatus?.name ?? p.status ?? "").toLowerCase();
-      return name.includes("hold") || name.includes("on hold") || p.status === "on_hold";
+      const name = (p.projectStatus?.name ?? "").toLowerCase();
+      return name.includes("hold") || name.includes("on hold");
     }).length;
 
     const priorityDistribution = { normal: 0, high: 0, urgent: 0 };
@@ -465,8 +461,8 @@ async function todaysFocusReport(req, res) {
 
     const allTodayTasks = [...scheduledTasks, ...activeTasksOther];
 
-    const isCompleted = (t) => completedStatusIds.includes(t.taskStatusId) || t.status === "completed" || t.completedAt != null;
-    const isBlocked = (t) => blockingStatusIds.includes(t.taskStatusId) || t.status === "blocked";
+    const isCompleted = (t) => completedStatusIds.includes(t.taskStatusId) || t.completedAt != null;
+    const isBlocked = (t) => blockingStatusIds.includes(t.taskStatusId);
     const isInProgress = (t) => t.startedAt != null && !isCompleted(t) && !isBlocked(t);
 
     let T_sch = scheduledTasks.length;
@@ -575,7 +571,7 @@ async function todaysFocusReport(req, res) {
     // Task status grouping for the donut chart
     const statusDistribution = {};
     allTodayTasks.forEach(t => {
-      const s = t.taskStatus ? t.taskStatus.name : t.status;
+      const s = t.taskStatus ? t.taskStatus.name : "unknown";
       statusDistribution[s] = (statusDistribution[s] || 0) + 1;
     });
 
@@ -611,7 +607,7 @@ async function todaysFocusReport(req, res) {
              title: t.title,
              project: t.project.name,
              assignees: t.assignees,
-             status: t.status,
+             status: t.taskStatus?.name ?? null,
              taskStatusId: t.taskStatusId,
              hoursActive: t.timeLogs.reduce((acc, log) => acc + log.hoursLogged, 0),
              isBlocked: isBlocked(t)
@@ -683,7 +679,6 @@ async function progressReport(req, res) {
           title: true,
           projectId: true,
           taskStatusId: true,
-          status: true,
           priority: true,
           dueDate: true,
           completedAt: true,
@@ -700,7 +695,7 @@ async function progressReport(req, res) {
           dueDate: { lt: today, not: null },
           OR: [
             { taskStatus: { isFinal: false } },
-            { taskStatusId: null, status: { not: "completed" } },
+            { taskStatusId: null },
           ],
           completedAt: null,
         },
@@ -712,7 +707,6 @@ async function progressReport(req, res) {
           ...tasksWhere,
           OR: [
             { taskStatus: { isBlocking: true } },
-            { status: "waiting", taskStatusId: null },
           ],
         },
         _count: { id: true },
@@ -724,7 +718,6 @@ async function progressReport(req, res) {
           OR: [
             { taskStatus: { isFinal: true } },
             { completedAt: { not: null } },
-            { status: "completed", taskStatusId: null },
           ],
         },
         _count: { id: true },
@@ -748,8 +741,8 @@ async function progressReport(req, res) {
       : [];
 
     const statusById = Object.fromEntries((taskStatuses || []).map((s) => [s.id, s]));
-    const isCompleted = (t) => (t.taskStatusId != null && statusById[t.taskStatusId]?.isFinal) || t.status === "completed" || t.completedAt != null;
-    const isBlocked = (t) => (t.taskStatusId != null && statusById[t.taskStatusId]?.isBlocking) || t.status === "waiting";
+    const isCompleted = (t) => (t.taskStatusId != null && statusById[t.taskStatusId]?.isFinal) || t.completedAt != null;
+    const isBlocked = (t) => (t.taskStatusId != null && statusById[t.taskStatusId]?.isBlocking);
     const isOverdue = (t) => t.dueDate && new Date(t.dueDate) < today && !isCompleted(t);
 
     const totalTasks = tasksFlat.length;
@@ -760,8 +753,8 @@ async function progressReport(req, res) {
     const pending = tasksFlat.filter((t) => {
       if (isCompleted(t) || isBlocked(t)) return false;
       const st = t.taskStatusId != null ? statusById[t.taskStatusId] : null;
-      const name = (st?.name ?? t.status ?? "").toLowerCase();
-      return name.includes("pending") || name.includes("to do") || name.includes("todo") || t.status === "pending";
+      const name = (st?.name ?? "").toLowerCase();
+      return name.includes("pending") || name.includes("to do") || name.includes("todo");
     }).length;
     const completionRatio = totalTasks > 0 ? Math.round((completed / totalTasks) * 100) : 0;
 
@@ -877,7 +870,7 @@ async function progressReport(req, res) {
         title: t.title,
         projectId: t.projectId,
         projectName: t.project?.name,
-        status: t.status,
+        status: t.taskStatus?.name ?? null,
         taskStatusId: t.taskStatusId,
         priority: t.priority,
         dueDate: t.dueDate,
@@ -889,7 +882,7 @@ async function progressReport(req, res) {
 
     const statusDistribution = {};
     tasksFlat.forEach((t) => {
-      const label = t.taskStatusId != null ? (statusById[t.taskStatusId]?.name ?? t.status) : t.status;
+      const label = t.taskStatusId != null ? (statusById[t.taskStatusId]?.name ?? "unknown") : "unknown";
       statusDistribution[label] = (statusDistribution[label] || 0) + 1;
     });
 

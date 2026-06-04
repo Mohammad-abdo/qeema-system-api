@@ -15,6 +15,7 @@
     "seed:dev:reset": "node prisma/seed.js",
     "seed:prod:safe": "node prisma/seed-prod-safe.js",
     "test:api": "node scripts/test-api.js",
+    "test:smoke": "node scripts/smoke-pms-features.js",
     "test:kpis": "node src/tests/todaysFocusReportKpis.runner.js",
     "script:init-rbac": "node scripts/initialize-rbac.js",
     "script:list-users": "node scripts/list-users.js",

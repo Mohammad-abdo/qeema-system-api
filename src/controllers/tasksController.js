@@ -22,19 +22,11 @@ function buildListWhere(query, userId) {
     where.projectId = { in: query.projectId.map((id) => parseInt(id, 10)).filter((n) => !Number.isNaN(n)) };
   }
   if (query.status && query.status.length) {
-    const statusIds = [];
-    const statusNames = [];
-    for (const s of query.status) {
-      const id = parseInt(s, 10);
-      if (!Number.isNaN(id)) statusIds.push(id);
-      else statusNames.push(s);
-    }
-    const conditions = [];
-    if (statusIds.length) conditions.push({ taskStatusId: { in: statusIds } });
-    if (statusNames.length) conditions.push({ status: { in: statusNames }, taskStatusId: null });
-    if (conditions.length) {
-      where.AND = where.AND || [];
-      where.AND.push({ OR: conditions });
+    const statusIds = query.status
+      .map((s) => parseInt(s, 10))
+      .filter((n) => !Number.isNaN(n));
+    if (statusIds.length) {
+      where.taskStatusId = { in: statusIds };
     }
   }
   if (query.priority && query.priority.length) {
@@ -73,14 +65,13 @@ const taskListSelect = {
   title: true,
   description: true,
   priority: true,
-  status: true,
   dueDate: true,
   plannedDate: true,
   projectId: true,
   createdAt: true,
   createdById: true,
   taskStatusId: true,
-  taskStatus: { select: { id: true, name: true, color: true, isFinal: true } },
+  taskStatus: { select: { id: true, name: true, color: true, isFinal: true, isBlocking: true } },
   assignees: {
     where: { isActive: true },
     select: { id: true, username: true, email: true, avatarUrl: true },
@@ -99,7 +90,6 @@ const taskGetOneSelect = {
   title: true,
   description: true,
   priority: true,
-  status: true,
   dueDate: true,
   projectId: true,
   createdAt: true,
@@ -110,7 +100,7 @@ const taskGetOneSelect = {
   teamId: true,
   assignees: { where: { isActive: true }, select: { id: true, username: true, email: true, avatarUrl: true } },
   project: { select: { id: true, name: true } },
-  taskStatus: { select: { id: true, name: true, color: true, isFinal: true } },
+  taskStatus: { select: { id: true, name: true, color: true, isFinal: true, isBlocking: true } },
   team: { select: { id: true, name: true } },
   creator: { select: { id: true, username: true, email: true, avatarUrl: true } },
   attachments: { select: { id: true, fileName: true, fileUrl: true, fileType: true, fileSize: true, uploadedAt: true } },
@@ -141,10 +131,9 @@ const taskGetOneSelect = {
         select: {
           id: true,
           title: true,
-          status: true,
           projectId: true,
           project: { select: { id: true, name: true } },
-          taskStatus: { select: { id: true, name: true, isFinal: true } },
+          taskStatus: { select: { id: true, name: true, isFinal: true, isBlocking: true } },
           assignees: { where: { isActive: true }, select: { id: true, username: true, avatarUrl: true } },
         },
       },
@@ -157,11 +146,23 @@ const taskGetOneSelect = {
         select: {
           id: true,
           title: true,
-          status: true,
+          taskStatus: { select: { id: true, name: true, isFinal: true } },
           assignees: { where: { isActive: true }, select: { id: true, username: true, avatarUrl: true } },
         },
       },
     },
+  },
+  timeLogs: {
+    select: {
+      id: true,
+      hoursLogged: true,
+      description: true,
+      logDate: true,
+      createdAt: true,
+      userId: true,
+      user: { select: { id: true, username: true, email: true, avatarUrl: true } },
+    },
+    orderBy: { logDate: "desc" },
   },
   _count: { select: { subtasks: true, dependencies: true, dependents: true, comments: true } },
 };
@@ -252,10 +253,6 @@ async function create(req, res) {
     if (!projectId || Number.isNaN(projectId)) {
       return sendError(res, 400, "projectId is required", { code: CODES.BAD_REQUEST, requestId: req.id });
     }
-    const allowed = await hasPermissionWithoutRoleBypass(userId, "task.create", projectId);
-    if (!allowed) {
-      return sendError(res, 403, "Permission denied: You don't have permission to create tasks", { code: CODES.FORBIDDEN, requestId: req.id });
-    }
     const title = body.title && String(body.title).trim();
     if (!title) return sendError(res, 400, "title is required", { code: CODES.BAD_REQUEST, requestId: req.id });
     const assigneeIds = Array.isArray(body.assigneeIds) ? body.assigneeIds.map((id) => parseInt(id, 10)).filter((n) => !Number.isNaN(n)) : [];
@@ -329,7 +326,6 @@ async function update(req, res) {
     if (body.title != null) updateData.title = String(body.title).trim();
     if (body.description != null) updateData.description = body.description;
     if (body.priority != null) updateData.priority = body.priority;
-    if (body.status != null) updateData.status = body.status;
     if (body.taskStatusId != null) updateData.taskStatusId = body.taskStatusId ? parseInt(body.taskStatusId, 10) : null;
     if (body.dueDate != null) updateData.dueDate = body.dueDate ? new Date(body.dueDate) : null;
     if (body.plannedDate !== undefined) updateData.plannedDate = body.plannedDate ? new Date(body.plannedDate) : null;
@@ -344,7 +340,6 @@ async function update(req, res) {
 
     let nowCompleted = false;
     let statusName = null;
-    if (updateData.status === "completed") nowCompleted = true;
     if (updateData.taskStatusId != null) {
       const ts = await prisma.taskStatus.findUnique({
         where: { id: updateData.taskStatusId },
@@ -388,8 +383,8 @@ async function update(req, res) {
       }
     }
 
-    if ((updateData.taskStatusId != null || updateData.status != null) && assigneeIds.length > 0) {
-      const name = statusName || updateData.status || "updated";
+    if (updateData.taskStatusId != null && assigneeIds.length > 0) {
+      const name = statusName || "updated";
       const toNotify = assigneeIds.filter((aid) => aid !== userId);
       if (toNotify.length > 0) {
         await notifyUsers(
@@ -497,18 +492,26 @@ async function getBlockingTaskStatusId() {
 
 async function setTaskBlockedStatus(taskId) {
   const blockingId = await getBlockingTaskStatusId();
-  await prisma.task.update({
-    where: { id: taskId },
-    data: blockingId
-      ? { taskStatusId: blockingId, status: "waiting" }
-      : { taskStatusId: null, status: "waiting" },
-  });
+  if (blockingId) {
+    await prisma.task.update({
+      where: { id: taskId },
+      data: { taskStatusId: blockingId },
+    });
+  }
 }
 
 async function setTaskUnblockedStatus(taskId) {
+  const defaultStatus = await prisma.taskStatus.findFirst({
+    where: { isDefault: true, isActive: true },
+    select: { id: true },
+  });
+  const pendingStatus = defaultStatus ?? await prisma.taskStatus.findFirst({
+    where: { name: "pending", isActive: true },
+    select: { id: true },
+  });
   await prisma.task.update({
     where: { id: taskId },
-    data: { taskStatusId: null, status: "pending" },
+    data: { taskStatusId: pendingStatus?.id ?? null },
   });
 }
 
@@ -518,17 +521,12 @@ async function hasUnresolvedDependencies(taskId) {
     select: {
       dependsOnTask: {
         select: {
-          status: true,
           taskStatus: { select: { isFinal: true } },
         },
       },
     },
   });
-  return deps.some(
-    (d) =>
-      d.dependsOnTask?.taskStatus?.isFinal !== true &&
-      d.dependsOnTask?.status !== "completed"
-  );
+  return deps.some((d) => d.dependsOnTask?.taskStatus?.isFinal !== true);
 }
 
 /**
@@ -545,7 +543,7 @@ async function unblockDependentsIfResolved(dependsOnTaskId) {
           id: true,
           title: true,
           projectId: true,
-          status: true,
+          taskStatus: { select: { isFinal: true } },
           createdById: true,
           assignees: { select: { id: true } },
         },
@@ -631,12 +629,10 @@ async function addDependency(req, res) {
     const depTask = await prisma.task.findUnique({
       where: { id: dependsOnTaskId },
       select: {
-        status: true,
         taskStatus: { select: { isFinal: true } },
       },
     });
-    const depCompleted =
-      depTask?.taskStatus?.isFinal === true || depTask?.status === "completed";
+    const depCompleted = depTask?.taskStatus?.isFinal === true;
     if (!depCompleted) await setTaskBlockedStatus(taskId);
 
     await logActivity({
@@ -763,10 +759,9 @@ async function getDependencyCandidates(req, res) {
       select: {
         id: true,
         title: true,
-        status: true,
         projectId: true,
         project: { select: { id: true, name: true } },
-        taskStatus: { select: { id: true, name: true, isFinal: true } },
+        taskStatus: { select: { id: true, name: true, isFinal: true, isBlocking: true } },
       },
     });
     return res.json({ success: true, tasks });
@@ -1011,6 +1006,89 @@ async function deleteComment(req, res) {
   }
 }
 
+async function createTimeLog(req, res) {
+  try {
+    const taskId = parseInt(req.params.id, 10);
+    const userId = Number(req.user.id);
+    if (Number.isNaN(taskId)) {
+      return sendError(res, 400, "Invalid task ID", { code: CODES.BAD_REQUEST, requestId: req.id });
+    }
+    const access = await ensureCanUpdateTask(userId, taskId);
+    if (access.error) {
+      return sendError(res, access.status, access.error, {
+        code: access.status === 404 ? CODES.NOT_FOUND : CODES.FORBIDDEN,
+        requestId: req.id,
+      });
+    }
+    const body = req.body || {};
+    const hours = parseFloat(body.hoursLogged);
+    if (Number.isNaN(hours) || hours <= 0) {
+      return sendError(res, 400, "hoursLogged must be a positive number", { code: CODES.BAD_REQUEST, requestId: req.id });
+    }
+    const logDate = body.logDate ? new Date(body.logDate) : new Date();
+    const timeLog = await prisma.timeLog.create({
+      data: {
+        taskId,
+        userId,
+        hoursLogged: hours,
+        description: body.description != null ? String(body.description) : null,
+        logDate,
+      },
+      select: {
+        id: true,
+        hoursLogged: true,
+        description: true,
+        logDate: true,
+        createdAt: true,
+        userId: true,
+        user: { select: { id: true, username: true, email: true, avatarUrl: true } },
+      },
+    });
+    await logActivity({
+      actionType: "time_logged",
+      actionCategory: "task",
+      entityType: "task",
+      entityId: taskId,
+      projectId: access.task.projectId,
+      performedById: userId,
+      actionSummary: `${hours}h logged on task #${taskId}`,
+    }, req);
+    return res.status(201).json({ success: true, timeLog });
+  } catch (err) {
+    console.error("[tasksController] createTimeLog:", err);
+    sendError(res, 500, err.message || "Failed to create time log", { code: CODES.INTERNAL_ERROR, requestId: req.id });
+  }
+}
+
+async function deleteTimeLog(req, res) {
+  try {
+    const taskId = parseInt(req.params.id, 10);
+    const logId = parseInt(req.params.logId, 10);
+    const userId = Number(req.user.id);
+    if (Number.isNaN(taskId) || Number.isNaN(logId)) {
+      return sendError(res, 400, "Invalid IDs", { code: CODES.BAD_REQUEST, requestId: req.id });
+    }
+    const access = await ensureCanUpdateTask(userId, taskId);
+    if (access.error) {
+      return sendError(res, access.status, access.error, {
+        code: access.status === 404 ? CODES.NOT_FOUND : CODES.FORBIDDEN,
+        requestId: req.id,
+      });
+    }
+    const existing = await prisma.timeLog.findFirst({ where: { id: logId, taskId } });
+    if (!existing) return sendError(res, 404, "Time log not found", { code: CODES.NOT_FOUND, requestId: req.id });
+    const isAdminUser = await isAdmin(userId);
+    if (!isAdminUser && existing.userId !== userId) {
+      return sendError(res, 403, "Permission denied", { code: CODES.FORBIDDEN, requestId: req.id });
+    }
+    await prisma.timeLog.delete({ where: { id: logId } });
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("[tasksController] deleteTimeLog:", err);
+    sendError(res, 500, err.message || "Failed to delete time log", { code: CODES.INTERNAL_ERROR, requestId: req.id });
+  }
+}
+
 module.exports = {
   list,
   getOne,
@@ -1025,4 +1103,6 @@ module.exports = {
   removeSubtask,
   createComment,
   deleteComment,
+  createTimeLog,
+  deleteTimeLog,
 };

@@ -17,24 +17,35 @@ async function getAllProjectsStats(req, res) {
       ],
     };
 
-    const [total, urgent] = await Promise.all([
+    const [total, urgent, statusCounts] = await Promise.all([
       prisma.project.count({ where }),
       prisma.project.count({
         where: { ...where, priority: "urgent" },
       }),
+      prisma.project.groupBy({
+        by: ["projectStatusId"],
+        where,
+        _count: { id: true },
+      }),
     ]);
 
-    const statusCounts = await prisma.project.groupBy({
-      by: ["status", "projectStatusId"],
-      where,
-      _count: { id: true },
+    const statusRows = await prisma.projectStatus.findMany({
+      select: { id: true, name: true, isFinal: true },
     });
+    const finalIds = new Set(statusRows.filter((s) => s.isFinal).map((s) => s.id));
+    const activeNames = new Set(["active", "planned"]);
 
     let active = 0;
     let completed = 0;
     for (const g of statusCounts) {
-      if (g.status === "active" || g.status === null) active += g._count.id;
-      if (g.status === "completed") completed += g._count.id;
+      if (g.projectStatusId && finalIds.has(g.projectStatusId)) {
+        completed += g._count.id;
+      } else {
+        const name = statusRows.find((s) => s.id === g.projectStatusId)?.name?.toLowerCase() ?? "";
+        if (activeNames.has(name) || !g.projectStatusId) active += g._count.id;
+        else if (name.includes("complet")) completed += g._count.id;
+        else active += g._count.id;
+      }
     }
 
     return res.json({
@@ -62,7 +73,7 @@ async function getProjectStats(req, res) {
           projectId,
           OR: [
             { taskStatus: { isFinal: true } },
-            { status: "completed", taskStatusId: null },
+            { completedAt: { not: null } },
           ],
         },
       }),
@@ -71,7 +82,6 @@ async function getProjectStats(req, res) {
           projectId,
           OR: [
             { taskStatus: { isBlocking: true } },
-            { status: "waiting", taskStatusId: null },
           ],
         },
       }),
@@ -81,7 +91,7 @@ async function getProjectStats(req, res) {
           dueDate: { lt: new Date() },
           OR: [
             { taskStatus: { isFinal: false } },
-            { status: { not: "completed" }, taskStatusId: null },
+            { taskStatusId: null },
           ],
         },
       }),
@@ -91,24 +101,24 @@ async function getProjectStats(req, res) {
           priority: { in: ["high", "urgent"] },
           OR: [
             { taskStatus: { isFinal: false } },
-            { status: { not: "completed" }, taskStatusId: null },
+            { taskStatusId: null },
           ],
         },
       }),
     ]);
 
     const totalTasks = taskStats._count.id;
-    const inProgressTasks = Math.max(0, totalTasks - completedTasks - blockedTasks);
+    const percentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
     return res.json({
       success: true,
       data: {
         totalTasks,
         completedTasks,
-        inProgressTasks,
         blockedTasks,
         overdueTasks,
         urgentTasks,
+        percentage,
       },
     });
   } catch (err) {

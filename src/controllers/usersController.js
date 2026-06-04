@@ -205,7 +205,15 @@ async function remove(req, res) {
     const user = await prisma.user.findUnique({
       where: { id },
       include: {
-        projectsManaged: { where: { NOT: { status: "completed" } }, select: { id: true, name: true } },
+        projectsManaged: {
+          where: {
+            OR: [
+              { projectStatus: { isFinal: false } },
+              { projectStatusId: null },
+            ],
+          },
+          select: { id: true, name: true },
+        },
         teamsLed: { select: { id: true, name: true } },
       },
     });
@@ -229,7 +237,6 @@ async function remove(req, res) {
     await prisma.$transaction(async (tx) => {
       await tx.activityLog.updateMany({ where: { performedById: id }, data: { performedById: null } });
       await tx.activityLog.updateMany({ where: { affectedUserId: id }, data: { affectedUserId: null } });
-      await tx.activityLog.updateMany({ where: { userId: id }, data: { userId: null } });
       await tx.project.updateMany({ where: { createdById: id }, data: { createdById: null } });
       await tx.project.updateMany({ where: { projectManagerId: id }, data: { projectManagerId: null } });
       await tx.project.updateMany({ where: { urgentMarkedById: id }, data: { urgentMarkedById: null } });
@@ -276,7 +283,12 @@ async function getProjects(req, res) {
           { tasks: { some: { assignees: { some: { id: id } } } } },
         ],
       },
-      select: { id: true, name: true, status: true },
+      select: {
+        id: true,
+        name: true,
+        projectStatusId: true,
+        projectStatus: { select: { id: true, name: true } },
+      },
       orderBy: { name: "asc" },
     });
     return res.json({ success: true, projects });
@@ -303,7 +315,7 @@ async function getTasks(req, res) {
         select: {
           id: true,
           title: true,
-          status: true,
+          taskStatusId: true,
           priority: true,
           dueDate: true,
           projectId: true,

@@ -19,7 +19,6 @@ model User {
   avatarUrl                      String?                         @map("avatar_url")
   activityLogsPerformed          ActivityLog[]                   @relation("ActivityPerformedBy")
   activityLogsAffected           ActivityLog[]                   @relation("ActivityAffectedUser")
-  activityLogs                   ActivityLog[]                   @relation("ActivityLogs") // Legacy relation
   uploadedFiles                  Attachment[]                    @relation("FileUploader")
   createdRules                   AutomationRule[]
   comments                       Comment[]
@@ -79,12 +78,10 @@ model Team {
 model Project {
   id                      Int                             @id @default(autoincrement())
   name                    String
-  type                    String // Legacy field, kept for backward compatibility
   projectTypeId           Int?                            @map("project_type_id")
   projectStatusId         Int?                            @map("project_status_id")
   description             String?
   scope                   String?                         @map("scope_text")
-  status                  String                          @default("planned") // Legacy field, kept for backward compatibility
   priority                String                          @default("normal") // "normal", "high", "urgent"
   urgentReason            String?                         @map("urgent_reason")
   urgentMarkedAt          DateTime?                       @map("urgent_marked_at")
@@ -113,7 +110,6 @@ model Project {
   urgentAcknowledgments   UrgentProjectAcknowledgement[]
 
   @@index([createdAt])  // For sorting by creation date
-  @@index([status])     // For filtering by legacy status
   @@index([projectStatusId]) // For filtering by dynamic status
   @@index([projectTypeId]) // For filtering by type
   @@index([projectManagerId]) // For finding PM's projects
@@ -126,7 +122,6 @@ model Task {
   id             Int              @id @default(autoincrement())
   title          String
   description    String?
-  status         String           @default("pending") // Legacy field, kept for backward compatibility
   taskStatusId   Int?             @map("task_status_id")
   priority       String           @default("normal")
   dueDate        DateTime?        @map("due_date")
@@ -159,7 +154,6 @@ model Task {
   @@index([taskStatusId])
   @@index([projectId])  // For finding tasks by project
   @@index([priority])   // For filtering by priority
-  @@index([status])     // For filtering by legacy status
   @@index([dueDate])    // For date range queries
   @@index([createdAt])  // For sorting by creation date
   @@index([createdById]) // For finding user's created tasks
@@ -362,16 +356,10 @@ model ActivityLog {
   userAgent      String?  @map("user_agent")
   createdAt      DateTime @default(now()) @map("created_at")
 
-  // Legacy fields (kept for backward compatibility during migration)
-  action      String? @map("action") // Old field - will be removed later
-  description String? @map("description") // Old field - will be removed later
-  userId      Int?    @map("user_id") // Old field - will be removed later
-
   // Relationships
   performedBy  User?    @relation("ActivityPerformedBy", fields: [performedById], references: [id])
   affectedUser User?    @relation("ActivityAffectedUser", fields: [affectedUserId], references: [id])
   project      Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  user         User?    @relation("ActivityLogs", fields: [userId], references: [id]) // Legacy relation
 
   @@index([createdAt])
   @@index([performedById])

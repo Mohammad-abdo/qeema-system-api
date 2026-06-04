@@ -1,7 +1,7 @@
 "use strict";
 
 const { prisma } = require("../lib/prisma");
-const { hasPermissionWithoutRoleBypass, isAdmin } = require("../lib/rbac");
+const { hasPermissionWithoutRoleBypass } = require("../lib/rbac");
 const { sendError, CODES } = require("../lib/errorResponse");
 
 function startOfDay(d) {
@@ -14,6 +14,33 @@ function endOfDay(d) {
   const x = new Date(d);
   x.setHours(23, 59, 59, 999);
   return x;
+}
+
+/** Tasks that are not in a final (completed) status. */
+function taskNotFinalWhere() {
+  return {
+    OR: [
+      { taskStatus: { isFinal: false } },
+      { taskStatusId: null },
+    ],
+  };
+}
+
+/** Tasks in a final (completed) status. */
+function taskFinalWhere() {
+  return {
+    OR: [
+      { taskStatus: { isFinal: true } },
+      { completedAt: { not: null } },
+    ],
+  };
+}
+
+/** Tasks considered blocked (blocking status or no status with blocking flag). */
+function taskBlockedWhere(blockingStatusId) {
+  const parts = [{ taskStatus: { isBlocking: true } }];
+  if (blockingStatusId) parts.push({ taskStatusId: blockingStatusId });
+  return { OR: parts };
 }
 
 async function summary(req, res) {
@@ -78,10 +105,7 @@ async function summary(req, res) {
         where: {
           ...tasksWhereBase,
           dueDate: { gte: todayStart, lte: todayEnd },
-          OR: [
-            { taskStatus: { isFinal: false } },
-            { status: { not: "completed" }, taskStatusId: null },
-          ],
+          ...taskNotFinalWhere(),
         },
       }),
       prisma.task.count({
@@ -97,10 +121,7 @@ async function summary(req, res) {
         where: {
           ...tasksWhereBase,
           assignees: { some: { id: userId } },
-          OR: [
-            { taskStatus: { isFinal: true } },
-            { status: "completed", taskStatusId: null },
-          ],
+          ...taskFinalWhere(),
           updatedAt: { gte: todayStart, lte: todayEnd },
         },
       }),
@@ -130,10 +151,16 @@ async function summary(req, res) {
         _count: { id: true },
       }).catch(() => []),
       prisma.project.count({
-        where: { ...projectsWhere, status: "active", projectStatusId: null },
+        where: {
+          ...projectsWhere,
+          projectStatus: { name: { in: ["active", "Active", "planned", "Planned"] } },
+        },
       }).catch(() => 0),
       prisma.project.count({
-        where: { ...projectsWhere, status: "on_hold", projectStatusId: null },
+        where: {
+          ...projectsWhere,
+          projectStatus: { name: { contains: "hold" } },
+        },
       }).catch(() => 0),
     ]);
 
@@ -149,24 +176,27 @@ async function summary(req, res) {
     const blockingStatusId = taskStatuses.find((s) => s.isBlocking)?.id;
     const finalStatusId = taskStatuses.find((s) => s.isFinal)?.id;
 
+    const notFinalOverdue = finalStatusId
+      ? {
+          OR: [
+            { taskStatusId: { not: finalStatusId } },
+            { taskStatusId: null },
+          ],
+        }
+      : taskNotFinalWhere();
+
     const [blockedTasks, overdueTasks] = await Promise.all([
       prisma.task.count({
         where: {
           ...tasksWhereBase,
-          OR: [
-            ...(blockingStatusId ? [{ taskStatusId: blockingStatusId }] : []),
-            { status: "waiting", taskStatusId: null },
-          ],
+          ...taskBlockedWhere(blockingStatusId),
         },
       }),
       prisma.task.count({
         where: {
           ...tasksWhereBase,
           dueDate: { lt: new Date() },
-          OR: [
-            ...(finalStatusId ? [{ taskStatusId: { not: finalStatusId } }] : []),
-            { status: { not: "completed" }, taskStatusId: null },
-          ],
+          ...notFinalOverdue,
         },
       }),
     ]);

@@ -69,9 +69,9 @@ async function search(req, res) {
         select: {
           id: true,
           name: true,
-          status: true,
           description: true,
           projectStatusId: true,
+          projectStatus: { select: { id: true, name: true } },
           _count: { select: { tasks: true } },
         },
       }),
@@ -82,7 +82,8 @@ async function search(req, res) {
         select: {
           id: true,
           title: true,
-          status: true,
+          taskStatusId: true,
+          taskStatus: { select: { id: true, name: true } },
           priority: true,
           projectId: true,
           project: { select: { id: true, name: true } },

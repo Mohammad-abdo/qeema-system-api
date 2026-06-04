@@ -14,35 +14,17 @@ function buildListWhere(query, userId) {
     where.name = { contains: query.search };
   }
   if (query.category && query.category.length) {
-    where.type = { in: query.category };
+    const typeIds = query.category.map((id) => parseInt(id, 10)).filter((n) => !Number.isNaN(n));
+    if (typeIds.length) where.projectTypeId = { in: typeIds };
   }
   if (query.status && query.status.length) {
     const statusIds = [];
-    const statusNames = [];
     for (const s of query.status) {
       const id = parseInt(s, 10);
       if (!Number.isNaN(id)) statusIds.push(id);
-      else statusNames.push(s);
     }
-    const conditions = [];
-    if (statusIds.length) conditions.push({ projectStatusId: { in: statusIds } });
-    const legacyNames = statusNames.filter((n) => n !== "active" && n !== "completed");
-    if (legacyNames.length) {
-      conditions.push({ status: { in: legacyNames }, projectStatusId: null });
-    }
-    if (statusNames.includes("active")) {
-      conditions.push({ status: "active" });
-      conditions.push({ projectStatus: { isActive: true } });
-    }
-    if (statusNames.includes("completed")) {
-      conditions.push({ status: "completed" });
-      conditions.push({ projectStatus: { isFinal: true } });
-    }
-    if (conditions.length) {
-      where.OR = conditions;
-      if (query.priority && query.priority.length) {
-        where.priority = { in: query.priority };
-      }
+    if (statusIds.length) {
+      where.projectStatusId = { in: statusIds };
     }
   }
   if (query.startDate || query.endDate) {
@@ -80,8 +62,6 @@ const projectListSelect = {
   id: true,
   name: true,
   description: true,
-  status: true,
-  type: true,
   projectStatusId: true,
   projectTypeId: true,
   projectManagerId: true,
@@ -89,6 +69,8 @@ const projectListSelect = {
   endDate: true,
   createdAt: true,
   createdById: true,
+  projectStatus: { select: { id: true, name: true } },
+  projectType: { select: { id: true, name: true } },
   projectManager: {
     select: { id: true, username: true, email: true, avatarUrl: true },
   },
@@ -128,15 +110,13 @@ async function getOne(req, res) {
     const id = parseInt(req.params.id, 10);
     if (Number.isNaN(id)) return sendError(res, 400, "Invalid project ID", { code: CODES.BAD_REQUEST, requestId: req.id });
 
-    const [project, tasks, teams] = await Promise.all([
+    const [project, tasks, teams, deliverables, phases] = await Promise.all([
       prisma.project.findUnique({
         where: { id },
         select: {
           id: true,
           name: true,
           description: true,
-          status: true,
-          type: true,
           priority: true,
           projectStatusId: true,
           projectTypeId: true,
@@ -163,10 +143,9 @@ async function getOne(req, res) {
           id: true,
           title: true,
           description: true,
-          status: true,
           taskStatusId: true,
           taskStatus: {
-            select: { id: true, name: true, isFinal: true },
+            select: { id: true, name: true, isFinal: true, isBlocking: true },
           },
           priority: true,
           dueDate: true,
@@ -184,7 +163,12 @@ async function getOne(req, res) {
               dependencyType: true,
               dependsOnTaskId: true,
               dependsOnTask: {
-                select: { id: true, title: true, status: true, taskStatusId: true },
+                select: {
+                  id: true,
+                  title: true,
+                  taskStatusId: true,
+                  taskStatus: { select: { id: true, name: true, isFinal: true } },
+                },
               },
             },
           },
@@ -216,10 +200,18 @@ async function getOne(req, res) {
           },
         },
       }),
+      prisma.deliverable.findMany({
+        where: { projectId: id },
+        orderBy: { createdAt: "asc" },
+      }),
+      prisma.projectPhase.findMany({
+        where: { projectId: id },
+        orderBy: { sequenceOrder: "asc" },
+      }),
     ]);
 
     if (!project) return sendError(res, 404, "Project not found", { code: CODES.NOT_FOUND, requestId: req.id });
-    return res.json({ ...project, tasks, projectTeams: teams });
+    return res.json({ ...project, tasks, projectTeams: teams, deliverables, phases });
   } catch (err) {
     console.error("[projectsController] getOne:", err);
     sendError(res, 500, err.message || "Failed to fetch project", { code: CODES.INTERNAL_ERROR, requestId: req.id });
@@ -229,33 +221,30 @@ async function getOne(req, res) {
 async function create(req, res) {
   try {
     const userId = Number(req.user.id);
-    const allowed = await hasPermissionWithoutRoleBypass(userId, "project.create");
-    if (!allowed) {
-      return sendError(res, 403, "Permission denied: You don't have permission to create projects", { code: CODES.FORBIDDEN, requestId: req.id });
-    }
     const body = req.body || {};
     const name = body.name;
     if (!name || typeof name !== "string" || !name.trim()) {
       return sendError(res, 400, "Name is required", { code: CODES.BAD_REQUEST, requestId: req.id });
     }
-    const projectTypeId = body.projectTypeId != null ? parseInt(body.projectTypeId, 10) : null;
-    let typeName = body.type || "";
-    if (projectTypeId) {
-      const pt = await prisma.projectType.findUnique({
-        where: { id: projectTypeId },
-        select: { name: true },
+
+    let projectStatusId = body.projectStatusId != null ? parseInt(body.projectStatusId, 10) : null;
+    if (!projectStatusId) {
+      const defaultStatus = await prisma.projectStatus.findFirst({
+        where: { isDefault: true, isActive: true },
+        select: { id: true },
       });
-      if (pt) typeName = pt.name;
+      projectStatusId = defaultStatus?.id ?? null;
     }
+
+    const projectTypeId = body.projectTypeId != null ? parseInt(body.projectTypeId, 10) : null;
+
     const project = await prisma.project.create({
       data: {
         name: name.trim(),
-        type: typeName,
         projectTypeId: projectTypeId || undefined,
-        projectStatusId: body.projectStatusId != null ? parseInt(body.projectStatusId, 10) : undefined,
+        projectStatusId: projectStatusId || undefined,
         description: body.description || null,
         scope: body.scope || null,
-        status: "planned",
         startDate: body.startDate ? new Date(body.startDate) : null,
         endDate: body.endDate ? new Date(body.endDate) : null,
         projectManagerId: body.projectManagerId > 0 ? body.projectManagerId : null,
@@ -286,7 +275,7 @@ async function update(req, res) {
 
     const existing = await prisma.project.findUnique({
       where: { id },
-      select: { id: true, name: true, createdById: true, projectStatusId: true, status: true, projectManagerId: true },
+      select: { id: true, name: true, createdById: true, projectStatusId: true, projectManagerId: true },
     });
     if (!existing) return sendError(res, 404, "Project not found", { code: CODES.NOT_FOUND, requestId: req.id });
 
@@ -299,36 +288,22 @@ async function update(req, res) {
     const body = req.body || {};
     const projectTypeId = body.projectTypeId != null ? parseInt(body.projectTypeId, 10) : undefined;
     const projectStatusId = body.projectStatusId != null ? parseInt(body.projectStatusId, 10) : undefined;
-    let typeName = body.type;
-    let statusName = body.status;
-    if (projectTypeId) {
-      const pt = await prisma.projectType.findUnique({ where: { id: projectTypeId }, select: { name: true } });
-      if (pt) typeName = pt.name;
-    }
-    if (projectStatusId && prisma.projectStatus) {
-      const ps = await prisma.projectStatus.findUnique({ where: { id: projectStatusId }, select: { name: true } });
-      if (ps) statusName = ps.name;
-    }
 
     await prisma.project.update({
       where: { id },
       data: {
         name: body.name != null ? String(body.name) : undefined,
-        type: typeName,
         projectTypeId,
         projectStatusId,
         description: body.description != null ? body.description : undefined,
         scope: body.scope != null ? body.scope : undefined,
-        status: statusName,
         startDate: body.startDate ? new Date(body.startDate) : undefined,
         endDate: body.endDate ? new Date(body.endDate) : undefined,
         projectManagerId: body.projectManagerId != null && body.projectManagerId > 0 ? body.projectManagerId : null,
       },
     });
 
-    const statusChanged =
-      (projectStatusId != null && projectStatusId !== existing.projectStatusId) ||
-      (statusName != null && statusName !== existing.status);
+    const statusChanged = projectStatusId != null && projectStatusId !== existing.projectStatusId;
     if (statusChanged) {
       const assignees = await prisma.task.findMany({
         where: { projectId: id },
@@ -340,7 +315,10 @@ async function update(req, res) {
       memberIds.delete(userId);
       const toNotify = [...memberIds];
       if (toNotify.length > 0) {
-        const displayStatus = statusName || (projectStatusId ? (await prisma.projectStatus.findUnique({ where: { id: projectStatusId }, select: { name: true } }))?.name : null) || "updated";
+        const ps = projectStatusId
+          ? await prisma.projectStatus.findUnique({ where: { id: projectStatusId }, select: { name: true } })
+          : null;
+        const displayStatus = ps?.name || "updated";
         await notifyUsers(
           toNotify.map((uid) => ({
             userId: uid,

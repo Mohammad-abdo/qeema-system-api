@@ -229,8 +229,8 @@ async function exportExcel(req, res, next) {
     const projectsRows = projects.map(p => ({
       ID: p.id,
       Name: p.name,
-      Type: p.projectType?.name || p.type || "",
-      Status: p.projectStatus?.name || p.status || "",
+      Type: p.projectType?.name || "",
+      Status: p.projectStatus?.name || "",
       Priority: p.priority,
       Description: p.description || "",
       Scope: p.scope || "",
@@ -255,7 +255,7 @@ async function exportExcel(req, res, next) {
       ID: t.id,
       Title: t.title,
       Description: t.description || "",
-      Status: t.taskStatus?.name || t.status || "",
+      Status: t.taskStatus?.name || "",
       Priority: t.priority,
       Project_Name: t.project?.name || "",
       Creator: t.creator?.username || "",
@@ -643,8 +643,6 @@ async function importExcel(req, res, next) {
 
           const projectData = {
             name,
-            type: typeName, // For legacy compatibility
-            status: statusName, // For legacy compatibility
             projectType: projectTypeId ? { connect: { id: projectTypeId } } : undefined,
             projectStatus: projectStatusId ? { connect: { id: projectStatusId } } : undefined,
             priority,
@@ -748,7 +746,6 @@ async function importExcel(req, res, next) {
           const taskData = {
             title,
             description,
-            status: statusName,
             taskStatusId,
             priority,
             projectId,
@@ -996,8 +993,8 @@ async function exportPDF(req, res, next) {
         // Details
         doc.fillColor("#334155").fontSize(10);
         doc.text(`ID: ${project.id}`);
-        doc.text(`Type/Category: ${project.projectType?.name || project.type || "—"}`);
-        doc.text(`Status: ${project.projectStatus?.name || project.status || "—"}`);
+        doc.text(`Type/Category: ${project.projectType?.name || "—"}`);
+        doc.text(`Status: ${project.projectStatus?.name || "—"}`);
         doc.text(`Priority: ${String(project.priority).toUpperCase()}`);
         doc.text(`Project Manager: ${project.projectManager?.username || "Unassigned"}`);
         doc.text(`Timeline: ${formatDate(project.startDate)} to ${formatDate(project.endDate)}`);
@@ -1015,7 +1012,7 @@ async function exportPDF(req, res, next) {
         const rows = project.tasks.map(t => [
           t.id,
           t.title,
-          t.taskStatus?.name || t.status || "—",
+          t.taskStatus?.name || "—",
           t.priority,
           t.assignees.map(a => a.username).join(", ") || "Unassigned"
         ]);
@@ -1052,7 +1049,7 @@ async function exportPDF(req, res, next) {
         doc.fillColor("#334155").fontSize(10);
         doc.text(`ID: ${task.id}`);
         doc.text(`Project: ${task.project?.name || "—"}`);
-        doc.text(`Status: ${task.taskStatus?.name || task.status || "—"}`);
+        doc.text(`Status: ${task.taskStatus?.name || "—"}`);
         doc.text(`Priority: ${String(task.priority).toUpperCase()}`);
         doc.text(`Creator: ${task.creator?.username || "—"}`);
         doc.text(`Due Date: ${formatDate(task.dueDate)}`);
@@ -1100,7 +1097,7 @@ async function exportPDF(req, res, next) {
             },
             projectTeams: {
               include: {
-                project: { select: { name: true, status: true } }
+                project: { select: { name: true, projectStatus: { select: { name: true } } } }
               }
             }
           }
@@ -1136,7 +1133,7 @@ async function exportPDF(req, res, next) {
           const projectHeaders = ["Project Name", "Status"];
           const projectRows = team.projectTeams.map(pt => [
             pt.project?.name || "—",
-            pt.project?.status || "—"
+            pt.project?.projectStatus?.name || "—"
           ]);
           renderTable("Assigned Projects", projectHeaders, projectRows, [300, 230]);
         }
@@ -1145,10 +1142,11 @@ async function exportPDF(req, res, next) {
           where: { id },
           include: {
             team: { select: { name: true } },
-            projectsManaged: { select: { name: true, status: true } },
+            projectsManaged: { select: { name: true, projectStatus: { select: { name: true } } } },
             assignedTasks: {
               include: {
-                project: { select: { name: true } }
+                project: { select: { name: true } },
+                taskStatus: { select: { name: true } },
               }
             }
           }
@@ -1173,14 +1171,19 @@ async function exportPDF(req, res, next) {
         // Managed Projects Table
         if (user.projectsManaged.length > 0) {
           const headers = ["Managed Project Name", "Status"];
-          const rows = user.projectsManaged.map(p => [p.name, p.status]);
+          const rows = user.projectsManaged.map(p => [p.name, p.projectStatus?.name || "—"]);
           renderTable("Managed Projects List", headers, rows, [350, 180]);
         }
 
         // Assigned Tasks Table
         if (user.assignedTasks.length > 0) {
           const headers = ["Task Title", "Project", "Priority", "Status"];
-          const rows = user.assignedTasks.map(t => [t.title, t.project?.name || "—", t.priority, t.status]);
+          const rows = user.assignedTasks.map(t => [
+            t.title,
+            t.project?.name || "—",
+            t.priority,
+            t.taskStatus?.name || "—",
+          ]);
           renderTable("Assigned Tasks List", headers, rows, [180, 180, 80, 90]);
         }
       }
@@ -1209,7 +1212,7 @@ async function exportPDF(req, res, next) {
           },
         });
         const headers = ["ID", "Project Name", "Priority", "Status", "Manager"];
-        const rows = projects.map(p => [p.id, p.name, p.priority, p.projectStatus?.name || p.status || "", p.projectManager?.username || ""]);
+        const rows = projects.map(p => [p.id, p.name, p.priority, p.projectStatus?.name || "", p.projectManager?.username || ""]);
         renderTable("Projects List", headers, rows, [40, 180, 80, 100, 120]);
       }
 
@@ -1221,7 +1224,7 @@ async function exportPDF(req, res, next) {
           },
         });
         const headers = ["ID", "Task Title", "Project", "Status", "Priority"];
-        const rows = tasks.map(t => [t.id, t.title, t.project?.name || "", t.taskStatus?.name || t.status || "", t.priority]);
+        const rows = tasks.map(t => [t.id, t.title, t.project?.name || "", t.taskStatus?.name || "", t.priority]);
         renderTable("Tasks Directory", headers, rows, [40, 180, 140, 100, 60]);
       }
 
@@ -1237,6 +1240,34 @@ const backupsDir = path.join(__dirname, "..", "..", "backups");
 // Ensure backups directory exists
 if (!fs.existsSync(backupsDir)) {
   fs.mkdirSync(backupsDir, { recursive: true });
+}
+
+// Private helper to capture a full database backup locally
+async function saveDatabaseSnapshotToFile(filePath) {
+  const { Prisma } = require("@prisma/client");
+  const models = Prisma?.dmmf?.datamodel?.models || [];
+  if (models.length === 0) {
+    throw new Error("Prisma models not found in DMMF.");
+  }
+
+  const data = {};
+  for (const m of models) {
+    const delegate = prisma[lowerFirst(m.name)];
+    if (!delegate || typeof delegate.findMany !== "function") continue;
+    data[m.name] = await delegate.findMany();
+  }
+
+  const payload = {
+    format: "prisma-json-backup",
+    database: "qeema",
+    exportedAt: new Date().toISOString(),
+    modelCount: Object.keys(data).length,
+    data,
+  };
+
+  const { prismaJsonReplacer, atomicWriteFile } = require("../../scripts/db-backup-helpers");
+  const json = JSON.stringify(payload, prismaJsonReplacer, 2);
+  atomicWriteFile(filePath, json);
 }
 
 // 1. Export Database
@@ -1274,7 +1305,7 @@ async function exportDatabase(req, res, next) {
   }
 }
 
-// 2. Import/Restore Database
+// 2. Import/Restore Database (Transactional with auto-rollback snapshot)
 async function importDatabase(req, res, next) {
   if (!req.file) {
     return res.status(400).json({ success: false, error: "No backup file uploaded" });
@@ -1292,29 +1323,44 @@ async function importDatabase(req, res, next) {
     const { Prisma } = require("@prisma/client");
     const models = Prisma?.dmmf?.datamodel?.models || [];
 
-    await prisma.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS=0;");
+    // Trigger pre-restore safety rollback snapshot
+    const preRestoreFilename = `db_backup_pre_restore_${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+    const preRestoreFilePath = path.join(backupsDir, preRestoreFilename);
     try {
-      for (const m of models) {
-        const delegate = prisma[lowerFirst(m.name)];
-        if (!delegate || typeof delegate.deleteMany !== "function") continue;
-        await delegate.deleteMany();
-      }
-
-      for (const m of models) {
-        const rows = payload.data[m.name];
-        if (!rows || !Array.isArray(rows) || rows.length === 0) continue;
-        const delegate = prisma[lowerFirst(m.name)];
-        if (!delegate || typeof delegate.createMany !== "function") continue;
-
-        const chunkSize = 500;
-        for (let i = 0; i < rows.length; i += chunkSize) {
-          const chunk = rows.slice(i, i + chunkSize);
-          await delegate.createMany({ data: chunk });
-        }
-      }
-    } finally {
-      await prisma.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS=1;");
+      await saveDatabaseSnapshotToFile(preRestoreFilePath);
+      console.log(`[Database Import] Pre-restore backup created successfully: ${preRestoreFilename}`);
+    } catch (e) {
+      console.error(`[Database Import] Pre-restore backup failed:`, e.message);
     }
+
+    // Execute inside a single transactional context
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS=0;");
+      try {
+        for (const m of models) {
+          const delegate = tx[lowerFirst(m.name)];
+          if (!delegate || typeof delegate.deleteMany !== "function") continue;
+          await delegate.deleteMany();
+        }
+
+        for (const m of models) {
+          const rows = payload.data[m.name];
+          if (!rows || !Array.isArray(rows) || rows.length === 0) continue;
+          const delegate = tx[lowerFirst(m.name)];
+          if (!delegate || typeof delegate.createMany !== "function") continue;
+
+          const chunkSize = 500;
+          for (let i = 0; i < rows.length; i += chunkSize) {
+            const chunk = rows.slice(i, i + chunkSize);
+            await delegate.createMany({ data: chunk });
+          }
+        }
+      } finally {
+        await tx.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS=1;");
+      }
+    }, {
+      timeout: 60000
+    });
 
     return res.status(200).json({
       success: true,
@@ -1358,27 +1404,7 @@ async function createLocalBackup(req, res, next) {
     const filename = `db_backup_${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
     const filePath = path.join(backupsDir, filename);
 
-    const { Prisma } = require("@prisma/client");
-    const models = Prisma?.dmmf?.datamodel?.models || [];
-
-    const data = {};
-    for (const m of models) {
-      const delegate = prisma[lowerFirst(m.name)];
-      if (!delegate || typeof delegate.findMany !== "function") continue;
-      data[m.name] = await delegate.findMany();
-    }
-
-    const payload = {
-      format: "prisma-json-backup",
-      database: "qeema",
-      exportedAt: new Date().toISOString(),
-      modelCount: Object.keys(data).length,
-      data,
-    };
-
-    const { prismaJsonReplacer, atomicWriteFile } = require("../../scripts/db-backup-helpers");
-    const json = JSON.stringify(payload, prismaJsonReplacer, 2);
-    atomicWriteFile(filePath, json);
+    await saveDatabaseSnapshotToFile(filePath);
 
     return res.status(201).json({
       success: true,
@@ -1394,7 +1420,7 @@ async function createLocalBackup(req, res, next) {
   }
 }
 
-// 5. Restore from local backup
+// 5. Restore from local backup (Transactional with auto-rollback snapshot)
 async function restoreLocalBackup(req, res, next) {
   const { filename } = req.params;
   const filePath = path.join(backupsDir, filename);
@@ -1415,29 +1441,44 @@ async function restoreLocalBackup(req, res, next) {
     const { Prisma } = require("@prisma/client");
     const models = Prisma?.dmmf?.datamodel?.models || [];
 
-    await prisma.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS=0;");
+    // Trigger pre-restore safety rollback snapshot
+    const preRestoreFilename = `db_backup_pre_restore_${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+    const preRestoreFilePath = path.join(backupsDir, preRestoreFilename);
     try {
-      for (const m of models) {
-        const delegate = prisma[lowerFirst(m.name)];
-        if (!delegate || typeof delegate.deleteMany !== "function") continue;
-        await delegate.deleteMany();
-      }
-
-      for (const m of models) {
-        const rows = payload.data[m.name];
-        if (!rows || !Array.isArray(rows) || rows.length === 0) continue;
-        const delegate = prisma[lowerFirst(m.name)];
-        if (!delegate || typeof delegate.createMany !== "function") continue;
-
-        const chunkSize = 500;
-        for (let i = 0; i < rows.length; i += chunkSize) {
-          const chunk = rows.slice(i, i + chunkSize);
-          await delegate.createMany({ data: chunk });
-        }
-      }
-    } finally {
-      await prisma.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS=1;");
+      await saveDatabaseSnapshotToFile(preRestoreFilePath);
+      console.log(`[Database Restore] Pre-restore backup created successfully: ${preRestoreFilename}`);
+    } catch (e) {
+      console.error(`[Database Restore] Pre-restore backup failed:`, e.message);
     }
+
+    // Execute inside a single transactional context
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS=0;");
+      try {
+        for (const m of models) {
+          const delegate = tx[lowerFirst(m.name)];
+          if (!delegate || typeof delegate.deleteMany !== "function") continue;
+          await delegate.deleteMany();
+        }
+
+        for (const m of models) {
+          const rows = payload.data[m.name];
+          if (!rows || !Array.isArray(rows) || rows.length === 0) continue;
+          const delegate = tx[lowerFirst(m.name)];
+          if (!delegate || typeof delegate.createMany !== "function") continue;
+
+          const chunkSize = 500;
+          for (let i = 0; i < rows.length; i += chunkSize) {
+            const chunk = rows.slice(i, i + chunkSize);
+            await delegate.createMany({ data: chunk });
+          }
+        }
+      } finally {
+        await tx.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS=1;");
+      }
+    }, {
+      timeout: 60000
+    });
 
     return res.status(200).json({
       success: true,
@@ -1472,27 +1513,7 @@ async function runDailyBackupJob() {
     const filename = `db_backup_daily_${new Date().toISOString().slice(0, 10)}.json`;
     const filePath = path.join(backupsDir, filename);
 
-    const { Prisma } = require("@prisma/client");
-    const models = Prisma?.dmmf?.datamodel?.models || [];
-
-    const data = {};
-    for (const m of models) {
-      const delegate = prisma[lowerFirst(m.name)];
-      if (!delegate || typeof delegate.findMany !== "function") continue;
-      data[m.name] = await delegate.findMany();
-    }
-
-    const payload = {
-      format: "prisma-json-backup",
-      database: "qeema",
-      exportedAt: new Date().toISOString(),
-      modelCount: Object.keys(data).length,
-      data,
-    };
-
-    const { prismaJsonReplacer, atomicWriteFile } = require("../../scripts/db-backup-helpers");
-    const json = JSON.stringify(payload, prismaJsonReplacer, 2);
-    atomicWriteFile(filePath, json);
+    await saveDatabaseSnapshotToFile(filePath);
     console.log(`[Daily Backup Job] Automatic backup created successfully: ${filename}`);
 
     // Cleanup backups older than 7 days
@@ -1529,3 +1550,4 @@ module.exports = {
   deleteLocalBackup,
   runDailyBackupJob,
 };
+

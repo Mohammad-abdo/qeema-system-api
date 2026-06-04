@@ -182,12 +182,16 @@ router.get("/focus/data", authMiddleware, async (req, res) => {
                 where: {
                     assignees: { some: { id: userId } },
                     plannedDate: { gte: todayStart, lte: todayEnd },
-                    status: { not: "completed" },
+                    OR: [
+                        { taskStatus: { isFinal: false } },
+                        { taskStatusId: null },
+                    ],
                 },
                 select: {
                     id: true,
                     title: true,
-                    status: true,
+                    taskStatusId: true,
+                    taskStatus: { select: { id: true, name: true, isFinal: true } },
                     priority: true,
                     estimatedHours: true,
                     project: { select: { name: true } },
@@ -197,7 +201,10 @@ router.get("/focus/data", authMiddleware, async (req, res) => {
             prisma.task.findMany({
                 where: {
                     assignees: { some: { id: userId } },
-                    status: { not: "completed" },
+                    OR: [
+                        { taskStatus: { isFinal: false } },
+                        { taskStatusId: null },
+                    ],
                     OR: [
                         { plannedDate: null },
                         { plannedDate: { lt: todayStart } },
@@ -207,7 +214,8 @@ router.get("/focus/data", authMiddleware, async (req, res) => {
                 select: {
                     id: true,
                     title: true,
-                    status: true,
+                    taskStatusId: true,
+                    taskStatus: { select: { id: true, name: true, isFinal: true } },
                     priority: true,
                     estimatedHours: true,
                     project: { select: { name: true } },
@@ -253,8 +261,8 @@ router.get("/focus/unfinished-yesterday", authMiddleware, async (req, res) => {
                 id: true,
                 title: true,
                 projectId: true,
-                status: true,
                 taskStatusId: true,
+                taskStatus: { select: { id: true, name: true, isFinal: true } },
                 project: { select: { id: true, name: true } },
             },
             orderBy: { updatedAt: "desc" },
@@ -346,7 +354,8 @@ router.post("/focus/rollover", authMiddleware, async (req, res) => {
                 title: true,
                 projectId: true,
                 project: { select: { name: true } },
-                status: true,
+                taskStatusId: true,
+                taskStatus: { select: { id: true, name: true, isFinal: true } },
                 plannedDate: true,
                 rolloverCount: true,
             },

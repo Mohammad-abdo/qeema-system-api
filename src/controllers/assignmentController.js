@@ -71,19 +71,28 @@ async function getTaskCounts(req, res) {
       select: {
         id: true,
         assignedTasks: {
-          select: { id: true, projectId: true, plannedDate: true, status: true },
+          select: {
+            id: true,
+            projectId: true,
+            plannedDate: true,
+            taskStatusId: true,
+            completedAt: true,
+            taskStatus: { select: { isFinal: true } },
+          },
         },
       },
     });
+
+    const isOpenTask = (t) => !t.taskStatus?.isFinal && !t.completedAt;
 
     const counts = {};
     users.forEach((user) => {
       const todayTasks = user.assignedTasks.filter((t) => {
         if (!t.plannedDate) return false;
         const d = new Date(t.plannedDate);
-        return d >= dateStart && d <= dateEnd && t.status !== "completed";
+        return d >= dateStart && d <= dateEnd && isOpenTask(t);
       });
-      const totalTasks = user.assignedTasks.filter((t) => t.status !== "completed");
+      const totalTasks = user.assignedTasks.filter(isOpenTask);
       counts[user.id] = { today: todayTasks.length, total: totalTasks.length };
     });
 
@@ -111,21 +120,29 @@ async function getProjectsWithTasks(req, res) {
         tasks: {
           some: {
             assignees: { some: { id: { not: undefined } } },
-            status: { not: "completed" },
+            OR: [{ taskStatus: { isFinal: false } }, { taskStatusId: null }],
           },
         },
       },
       include: {
+        projectStatus: { select: { id: true, name: true } },
         tasks: {
           where: {
             assignees: { some: { id: { not: undefined } } },
-            status: { not: "completed" },
+            OR: [{ taskStatus: { isFinal: false } }, { taskStatusId: null }],
           },
           include: {
+            taskStatus: { select: { id: true, name: true, isFinal: true, isBlocking: true } },
             assignees: { where: { isActive: true }, select: { id: true, username: true, email: true } },
             dependencies: {
               include: {
-                dependsOnTask: { select: { id: true, title: true, status: true } },
+                dependsOnTask: {
+                  select: {
+                    id: true,
+                    title: true,
+                    taskStatus: { select: { id: true, name: true, isFinal: true } },
+                  },
+                },
               },
             },
           },
@@ -142,27 +159,29 @@ async function getProjectsWithTasks(req, res) {
         return d >= dateStart && d <= dateEnd;
       });
       const allTasks = project.tasks.map((t) => {
-        const blocking = (t.dependencies || []).filter((d) => d.dependsOnTask?.status !== "completed");
+        const blocking = (t.dependencies || []).filter(
+          (d) => d.dependsOnTask?.taskStatus?.isFinal !== true
+        );
         return {
           ...t,
           isBlocked: blocking.length > 0,
           blockingDependencies: blocking.map((d) => ({
             id: d.dependsOnTask.id,
             title: d.dependsOnTask.title,
-            status: d.dependsOnTask.status,
+            status: d.dependsOnTask.taskStatus?.name ?? null,
           })),
         };
       });
       return {
         id: project.id,
         name: project.name,
-        status: project.status,
+        status: project.projectStatus?.name ?? null,
         todayTasks: todayTasks.map((t) => {
           const full = allTasks.find((a) => a.id === t.id);
           return {
             id: t.id,
             title: t.title,
-            status: t.status,
+            status: t.taskStatus?.name ?? null,
             priority: t.priority,
             assignees: t.assignees,
             isBlocked: full?.isBlocked || false,
@@ -229,13 +248,20 @@ async function getUserProjectTasks(req, res) {
       where: {
         projectId,
         assignees: { some: { id: targetUserId } },
-        status: { not: "completed" },
+        OR: [{ taskStatus: { isFinal: false } }, { taskStatusId: null }],
       },
       include: {
+        taskStatus: { select: { id: true, name: true, isFinal: true } },
         project: { select: { id: true, name: true } },
         dependencies: {
           include: {
-            dependsOnTask: { select: { id: true, title: true, status: true } },
+            dependsOnTask: {
+              select: {
+                id: true,
+                title: true,
+                taskStatus: { select: { id: true, name: true, isFinal: true } },
+              },
+            },
           },
         },
         assignees: { where: { isActive: true }, select: { id: true, username: true } },
@@ -244,14 +270,16 @@ async function getUserProjectTasks(req, res) {
     });
 
     const withBlocking = tasks.map((t) => {
-      const blocking = (t.dependencies || []).filter((d) => d.dependsOnTask?.status !== "completed");
+      const blocking = (t.dependencies || []).filter(
+        (d) => d.dependsOnTask?.taskStatus?.isFinal !== true
+      );
       return {
         ...t,
         isBlocked: blocking.length > 0,
         blockingDependencies: blocking.map((d) => ({
           id: d.dependsOnTask.id,
           title: d.dependsOnTask.title,
-          status: d.dependsOnTask.status,
+          status: d.dependsOnTask.taskStatus?.name ?? null,
         })),
       };
     });

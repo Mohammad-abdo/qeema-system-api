@@ -110,7 +110,7 @@ async function getOne(req, res) {
     const id = parseInt(req.params.id, 10);
     if (Number.isNaN(id)) return sendError(res, 400, "Invalid project ID", { code: CODES.BAD_REQUEST, requestId: req.id });
 
-    const [project, tasks, teams, deliverables, phases] = await Promise.all([
+    const [project, tasks, teams, deliverables, phases, projectUserRows] = await Promise.all([
       prisma.project.findUnique({
         where: { id },
         select: {
@@ -156,7 +156,14 @@ async function getOne(req, res) {
             select: { id: true, username: true, email: true, avatarUrl: true },
           },
           attachments: {
-            select: { id: true, fileName: true, fileUrl: true, fileType: true, fileSize: true },
+            select: {
+              id: true,
+              fileName: true,
+              fileUrl: true,
+              fileType: true,
+              fileSize: true,
+              uploadedAt: true,
+            },
           },
           dependencies: {
             select: {
@@ -208,10 +215,42 @@ async function getOne(req, res) {
         where: { projectId: id },
         orderBy: { sequenceOrder: "asc" },
       }),
+      prisma.projectUser.findMany({
+        where: { projectId: id, leftAt: null },
+        select: {
+          id: true,
+          userId: true,
+          role: true,
+          allocationPercentage: true,
+          joinedAt: true,
+        },
+      }),
     ]);
 
     if (!project) return sendError(res, 404, "Project not found", { code: CODES.NOT_FOUND, requestId: req.id });
-    return res.json({ ...project, tasks, projectTeams: teams, deliverables, phases });
+
+    const memberUserIds = [...new Set(projectUserRows.map((pu) => pu.userId).filter(Boolean))];
+    const memberUsers =
+      memberUserIds.length > 0
+        ? await prisma.user.findMany({
+            where: { id: { in: memberUserIds }, isActive: true },
+            select: { id: true, username: true, email: true, avatarUrl: true },
+          })
+        : [];
+    const userById = Object.fromEntries(memberUsers.map((u) => [u.id, u]));
+    const projectMembers = projectUserRows.map((pu) => ({
+      ...pu,
+      user: userById[pu.userId] ?? null,
+    }));
+
+    return res.json({
+      ...project,
+      tasks,
+      projectTeams: teams,
+      deliverables,
+      phases,
+      projectMembers,
+    });
   } catch (err) {
     console.error("[projectsController] getOne:", err);
     sendError(res, 500, err.message || "Failed to fetch project", { code: CODES.INTERNAL_ERROR, requestId: req.id });

@@ -5,7 +5,85 @@ const { hasPermissionWithoutRoleBypass } = require("../lib/rbac");
 const { sendError, sendSuccess, CODES } = require("../lib/errorResponse");
 const { logActivity } = require("../lib/activityLogger");
 const { notifyUsers } = require("../lib/notifyUsers");
-const { startOfDay, endOfDay } = require("date-fns");
+const {
+  getCairoDateString,
+  getCairoDayRangeUtc,
+  parseAssignmentDate,
+} = require("../lib/cairoDateUtils");
+
+function getAssignmentDayRange(dateStr) {
+  const cairoDate = parseAssignmentDate(dateStr);
+  return getCairoDayRangeUtc(cairoDate);
+}
+
+const USER_TASK_INCLUDE = {
+  taskStatus: { select: { id: true, name: true, isFinal: true, isBlocking: true } },
+  project: { select: { id: true, name: true } },
+  dependencies: {
+    include: {
+      dependsOnTask: {
+        select: {
+          id: true,
+          title: true,
+          taskStatus: { select: { id: true, name: true, isFinal: true } },
+        },
+      },
+    },
+  },
+  assignees: { where: { isActive: true }, select: { id: true, username: true } },
+};
+
+function enrichTasksWithBlocking(tasks) {
+  return tasks.map((t) => {
+    const blocking = (t.dependencies || []).filter(
+      (d) => d.dependsOnTask?.taskStatus?.isFinal !== true
+    );
+    return {
+      ...t,
+      isBlocked: blocking.length > 0,
+      blockingDependencies: blocking.map((d) => ({
+        id: d.dependsOnTask.id,
+        title: d.dependsOnTask.title,
+        status: d.dependsOnTask.taskStatus?.name ?? null,
+      })),
+    };
+  });
+}
+
+function splitTasksByPlannedDate(tasks, dateStart, dateEnd) {
+  const availableTasks = tasks.filter((t) => {
+    if (!t.plannedDate) return true;
+    const d = new Date(t.plannedDate);
+    return !(d >= dateStart && d <= dateEnd);
+  });
+  const todayTasks = tasks.filter((t) => {
+    if (!t.plannedDate) return false;
+    const d = new Date(t.plannedDate);
+    return d >= dateStart && d <= dateEnd;
+  });
+  return { availableTasks, todayTasks };
+}
+
+async function fetchUserOpenTasks(targetUserId, projectId = null) {
+  const where = {
+    assignees: { some: { id: targetUserId } },
+    OR: [{ taskStatus: { isFinal: false } }, { taskStatusId: null }],
+  };
+  if (projectId != null) where.projectId = projectId;
+  return prisma.task.findMany({
+    where,
+    include: USER_TASK_INCLUDE,
+    orderBy: { updatedAt: "desc" },
+  });
+}
+
+function projectsFromTasks(tasks) {
+  const map = new Map();
+  tasks.forEach((t) => {
+    if (t.project?.id) map.set(t.project.id, { id: t.project.id, name: t.project.name });
+  });
+  return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+}
 
 async function canAccessAssignment(userId) {
   if (!userId) return false;
@@ -62,9 +140,8 @@ async function getTaskCounts(req, res) {
     if (!allowed) return sendError(res, 403, "Forbidden", { code: CODES.FORBIDDEN });
 
     const dateStr = req.query.date;
-    const targetDate = dateStr ? new Date(dateStr) : new Date();
-    const dateStart = startOfDay(targetDate);
-    const dateEnd = endOfDay(targetDate);
+    const { start: dateStart, end: dateEnd } = getAssignmentDayRange(dateStr);
+    const { start: cairoTodayStart } = getCairoDayRangeUtc(getCairoDateString());
 
     const users = await prisma.user.findMany({
       where: { isActive: true },
@@ -75,25 +152,57 @@ async function getTaskCounts(req, res) {
             id: true,
             projectId: true,
             plannedDate: true,
+            dueDate: true,
+            priority: true,
             taskStatusId: true,
             completedAt: true,
-            taskStatus: { select: { isFinal: true } },
+            taskStatus: { select: { isFinal: true, isBlocking: true, name: true } },
           },
         },
       },
     });
 
     const isOpenTask = (t) => !t.taskStatus?.isFinal && !t.completedAt;
+    const isBlockedTask = (t) => {
+      if (!isOpenTask(t)) return false;
+      const statusName = (t.taskStatus?.name || "").toLowerCase();
+      return (
+        t.taskStatus?.isBlocking === true ||
+        statusName.includes("block") ||
+        statusName.includes("wait")
+      );
+    };
+    const isInProgressTask = (t) => {
+      if (!isOpenTask(t) || isBlockedTask(t)) return false;
+      const statusName = (t.taskStatus?.name || "").toLowerCase();
+      return (
+        statusName.includes("progress") ||
+        statusName.includes("review") ||
+        statusName.includes("active") ||
+        statusName.includes("working")
+      );
+    };
+    const isOverdueTask = (t) =>
+      isOpenTask(t) && t.dueDate != null && new Date(t.dueDate) < cairoTodayStart;
+    const isUrgentHighTask = (t) =>
+      isOpenTask(t) && ["urgent", "high"].includes(String(t.priority || "").toLowerCase());
 
     const counts = {};
     users.forEach((user) => {
-      const todayTasks = user.assignedTasks.filter((t) => {
+      const openTasks = user.assignedTasks.filter(isOpenTask);
+      const todayTasks = openTasks.filter((t) => {
         if (!t.plannedDate) return false;
         const d = new Date(t.plannedDate);
-        return d >= dateStart && d <= dateEnd && isOpenTask(t);
+        return d >= dateStart && d <= dateEnd;
       });
-      const totalTasks = user.assignedTasks.filter(isOpenTask);
-      counts[user.id] = { today: todayTasks.length, total: totalTasks.length };
+      counts[user.id] = {
+        today: todayTasks.length,
+        total: openTasks.length,
+        overdue: openTasks.filter(isOverdueTask).length,
+        blocked: openTasks.filter(isBlockedTask).length,
+        urgentHigh: openTasks.filter(isUrgentHighTask).length,
+        inProgress: openTasks.filter(isInProgressTask).length,
+      };
     });
 
     return res.json({ success: true, counts });
@@ -111,9 +220,7 @@ async function getProjectsWithTasks(req, res) {
     if (!allowed) return sendError(res, 403, "Forbidden", { code: CODES.FORBIDDEN });
 
     const dateStr = req.query.date;
-    const targetDate = dateStr ? new Date(dateStr) : new Date();
-    const dateStart = startOfDay(targetDate);
-    const dateEnd = endOfDay(targetDate);
+    const { start: dateStart, end: dateEnd } = getAssignmentDayRange(dateStr);
 
     const projects = await prisma.project.findMany({
       where: {
@@ -226,6 +333,37 @@ async function getUserProjects(req, res) {
   }
 }
 
+async function getUserTasks(req, res) {
+  try {
+    const currentUserId = Number(req.user?.id);
+    if (!currentUserId) return sendError(res, 401, "Unauthorized", { code: CODES.UNAUTHORIZED });
+    const allowed = await canAccessAssignment(currentUserId);
+    if (!allowed) return sendError(res, 403, "Forbidden", { code: CODES.FORBIDDEN });
+
+    const targetUserId = parseInt(req.params.userId, 10);
+    if (Number.isNaN(targetUserId)) {
+      return sendError(res, 400, "Invalid user ID", { code: CODES.BAD_REQUEST, requestId: req.id });
+    }
+
+    const dateStr = req.query.date;
+    const { start: dateStart, end: dateEnd } = getAssignmentDayRange(dateStr);
+
+    const tasks = await fetchUserOpenTasks(targetUserId);
+    const withBlocking = enrichTasksWithBlocking(tasks);
+    const { availableTasks, todayTasks } = splitTasksByPlannedDate(withBlocking, dateStart, dateEnd);
+
+    return res.json({
+      success: true,
+      projects: projectsFromTasks(withBlocking),
+      todayTasks,
+      availableTasks,
+    });
+  } catch (err) {
+    console.error("[assignmentController] getUserTasks:", err);
+    sendError(res, 500, err.message || "Failed to fetch tasks", { code: CODES.INTERNAL_ERROR, requestId: req.id });
+  }
+}
+
 async function getUserProjectTasks(req, res) {
   try {
     const currentUserId = Number(req.user?.id);
@@ -240,60 +378,11 @@ async function getUserProjectTasks(req, res) {
     }
 
     const dateStr = req.query.date;
-    const targetDate = dateStr ? new Date(dateStr) : new Date();
-    const dateStart = startOfDay(targetDate);
-    const dateEnd = endOfDay(targetDate);
+    const { start: dateStart, end: dateEnd } = getAssignmentDayRange(dateStr);
 
-    const tasks = await prisma.task.findMany({
-      where: {
-        projectId,
-        assignees: { some: { id: targetUserId } },
-        OR: [{ taskStatus: { isFinal: false } }, { taskStatusId: null }],
-      },
-      include: {
-        taskStatus: { select: { id: true, name: true, isFinal: true } },
-        project: { select: { id: true, name: true } },
-        dependencies: {
-          include: {
-            dependsOnTask: {
-              select: {
-                id: true,
-                title: true,
-                taskStatus: { select: { id: true, name: true, isFinal: true } },
-              },
-            },
-          },
-        },
-        assignees: { where: { isActive: true }, select: { id: true, username: true } },
-      },
-      orderBy: { updatedAt: "desc" },
-    });
-
-    const withBlocking = tasks.map((t) => {
-      const blocking = (t.dependencies || []).filter(
-        (d) => d.dependsOnTask?.taskStatus?.isFinal !== true
-      );
-      return {
-        ...t,
-        isBlocked: blocking.length > 0,
-        blockingDependencies: blocking.map((d) => ({
-          id: d.dependsOnTask.id,
-          title: d.dependsOnTask.title,
-          status: d.dependsOnTask.taskStatus?.name ?? null,
-        })),
-      };
-    });
-
-    const availableTasks = withBlocking.filter((t) => {
-      if (!t.plannedDate) return true;
-      const d = new Date(t.plannedDate);
-      return !(d >= dateStart && d <= dateEnd);
-    });
-    const todayTasks = withBlocking.filter((t) => {
-      if (!t.plannedDate) return false;
-      const d = new Date(t.plannedDate);
-      return d >= dateStart && d <= dateEnd;
-    });
+    const tasks = await fetchUserOpenTasks(targetUserId, projectId);
+    const withBlocking = enrichTasksWithBlocking(tasks);
+    const { availableTasks, todayTasks } = splitTasksByPlannedDate(withBlocking, dateStart, dateEnd);
 
     return res.json({
       success: true,
@@ -328,14 +417,14 @@ async function assignToday(req, res) {
       return sendError(res, 404, "Task not found or not assigned to this user", { code: CODES.NOT_FOUND, requestId: req.id });
     }
 
-    const targetDate = date ? new Date(date) : new Date();
+    const { start: targetDate } = getCairoDayRangeUtc(parseAssignmentDate(date));
     await prisma.task.update({
       where: { id: tid },
       data: { plannedDate: targetDate },
     });
 
     if (targetUserId !== currentUserId) {
-      const dateStr = targetDate.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+      const dateStr = parseAssignmentDate(date);
       const projectName = task.project?.name ?? "Project";
       const projectId = task.projectId ?? 0;
       await prisma.notification.create({
@@ -426,6 +515,7 @@ module.exports = {
   getTaskCounts,
   getProjectsWithTasks,
   getUserProjects,
+  getUserTasks,
   getUserProjectTasks,
   assignToday,
   removeToday,

@@ -65,9 +65,6 @@ async function logActivity(params, req) {
         entityId: params.entityId ?? null,
         ipAddress: ipAddress || null,
         userAgent: userAgent || null,
-        action: params.actionType,
-        description: params.actionSummary,
-        userId: params.performedById,
       },
     });
   } catch (err) {

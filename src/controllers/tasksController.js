@@ -5,6 +5,7 @@ const { hasPermissionWithoutRoleBypass, isAdmin } = require("../lib/rbac");
 const { sendError, CODES } = require("../lib/errorResponse");
 const { logActivity } = require("../lib/activityLogger");
 const { notifyUsers } = require("../lib/notifyUsers");
+const { normalizePlannedDateToCairoDayStart } = require("../lib/cairoDateUtils");
 const { startOfDay, endOfDay } = require("date-fns");
 
 function buildListWhere(query, userId) {
@@ -328,7 +329,9 @@ async function update(req, res) {
     if (body.priority != null) updateData.priority = body.priority;
     if (body.taskStatusId != null) updateData.taskStatusId = body.taskStatusId ? parseInt(body.taskStatusId, 10) : null;
     if (body.dueDate != null) updateData.dueDate = body.dueDate ? new Date(body.dueDate) : null;
-    if (body.plannedDate !== undefined) updateData.plannedDate = body.plannedDate ? new Date(body.plannedDate) : null;
+    if (body.plannedDate !== undefined) {
+      updateData.plannedDate = normalizePlannedDateToCairoDayStart(body.plannedDate);
+    }
     if (body.assigneeIds && Array.isArray(body.assigneeIds)) {
       updateData.assignees = { set: body.assigneeIds.map((id) => ({ id: parseInt(id, 10) })).filter((o) => !Number.isNaN(o.id)) };
     }

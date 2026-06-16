@@ -79,7 +79,7 @@ async function getOne(req, res) {
               select: {
                 id: true,
                 name: true,
-                status: true,
+               // status: true,
                 startDate: true,
                 endDate: true,
                 projectManager: {

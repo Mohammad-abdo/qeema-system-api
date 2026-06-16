@@ -6,6 +6,30 @@ const { getCairoDayRangeUtc } = require("../../lib/cairoDateUtils");
 const { computeRegularityScore } = require("./performanceCalculation");
 
 const CAIRO_TIMEZONE = "Africa/Cairo";
+const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+function validateDateRangeStrings(startDate, endDate) {
+  const start = String(startDate || "").slice(0, 10);
+  const end = String(endDate || "").slice(0, 10);
+  if (!DATE_REGEX.test(start) || !DATE_REGEX.test(end)) {
+    const err = new Error("startDate and endDate must be YYYY-MM-DD");
+    err.statusCode = 400;
+    throw err;
+  }
+  if (start > end) {
+    const err = new Error("startDate must be on or before endDate");
+    err.statusCode = 400;
+    throw err;
+  }
+  return { start, end };
+}
+
+function overlapDayCount(queryStart, queryEnd, periodStart, periodEnd) {
+  const start = queryStart > periodStart ? queryStart : periodStart;
+  const end = queryEnd < periodEnd ? queryEnd : periodEnd;
+  if (start > end) return 0;
+  return enumerateDateStrings(start, end).length;
+}
 
 /**
  * @param {Date|string} value
@@ -74,6 +98,56 @@ async function loadPerformancePeriod(periodId) {
     periodEnd,
     expectedWorkingDays: periodDays.length,
   };
+}
+
+/**
+ * Resolve a performance period id from a requested date range.
+ * @param {string} startDate
+ * @param {string} endDate
+ * @returns {Promise<number>}
+ */
+async function findPerformancePeriodByDateRange(startDate, endDate) {
+  const { start, end } = validateDateRangeStrings(startDate, endDate);
+
+  const periods = await prisma.performancePeriod.findMany({
+    orderBy: { endDate: "desc" },
+  });
+
+  if (!periods.length) {
+    const err = new Error("No performance period found for this date range");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const mapped = periods.map((p) => ({
+    id: p.id,
+    startDate: periodDateToString(p.startDate),
+    endDate: periodDateToString(p.endDate),
+  }));
+
+  const exact = mapped.find((p) => p.startDate === start && p.endDate === end);
+  if (exact) return exact.id;
+
+  const contains = mapped.filter((p) => p.startDate <= start && p.endDate >= end);
+  if (contains.length) return contains[0].id;
+
+  let bestId = null;
+  let bestOverlap = 0;
+  for (const p of mapped) {
+    const days = overlapDayCount(start, end, p.startDate, p.endDate);
+    if (days > bestOverlap) {
+      bestOverlap = days;
+      bestId = p.id;
+    }
+  }
+
+  if (bestId == null || bestOverlap === 0) {
+    const err = new Error("No performance period found for this date range");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  return bestId;
 }
 
 /**
@@ -241,6 +315,7 @@ async function fetchAutoMetricsForUser(periodId, userId) {
 
 module.exports = {
   loadPerformancePeriod,
+  findPerformancePeriodByDateRange,
   resolveTargetUsers,
   fetchAutoMetricsForUser,
   fetchAutoMetricsForUsers,

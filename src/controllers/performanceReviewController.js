@@ -7,6 +7,7 @@ const {
   assertCanViewProfile,
   getPerformanceActorContext,
 } = require("../services/performance/performanceReviewAuth");
+const { findPerformancePeriodByDateRange } = require("../services/performance/performanceReviewData");
 const {
   upsertPerformanceReview,
   generatePerformanceReviewsForPeriod,
@@ -206,9 +207,23 @@ async function getDashboard(req, res) {
       return sendError(res, 401, "Unauthorized", { code: CODES.UNAUTHORIZED, requestId: req.id });
     }
 
-    const periodId = parseInt(req.query.periodId, 10);
-    if (Number.isNaN(periodId)) {
-      return sendError(res, 400, "periodId query parameter is required", {
+    const periodIdParam = req.query.periodId;
+    const startDateParam = req.query.startDate;
+    const endDateParam = req.query.endDate;
+
+    let periodId = null;
+    if (periodIdParam != null && periodIdParam !== "") {
+      periodId = parseInt(periodIdParam, 10);
+      if (Number.isNaN(periodId)) {
+        return sendError(res, 400, "Invalid period id", {
+          code: CODES.BAD_REQUEST,
+          requestId: req.id,
+        });
+      }
+    } else if (startDateParam && endDateParam) {
+      periodId = await findPerformancePeriodByDateRange(startDateParam, endDateParam);
+    } else {
+      return sendError(res, 400, "startDate and endDate, or periodId, is required", {
         code: CODES.BAD_REQUEST,
         requestId: req.id,
       });

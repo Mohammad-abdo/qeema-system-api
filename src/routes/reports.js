@@ -8,5 +8,6 @@ const router = express.Router();
 router.use(authMiddleware);
 
 router.get("/todays-focus", reportsController.todaysFocusAnalyticalReport);
+router.get("/staff-performance", reportsController.staffPerformanceReport);
 
 module.exports = router;

@@ -119,6 +119,20 @@ async function main() {
             });
         }
     }
+    // Staff performance RBAC: team_lead gets report.view + report.export (scoped in API); developer has none
+    const teamLeadReportKeys = ['report.view', 'report.export'];
+    for (const key of teamLeadReportKeys) {
+        const permId = permissionMap.get(key);
+        if (!permId) continue;
+        const existing = await prisma.rolePermission.findUnique({
+            where: { roleId_permissionId: { roleId: roles.team_lead.id, permissionId: permId } },
+        });
+        if (!existing) {
+            await prisma.rolePermission.create({
+                data: { roleId: roles.team_lead.id, permissionId: permId },
+            });
+        }
+    }
     const shiftPermKeys = ['focus.shift.daily.view', 'focus.shift.edit'];
     for (const key of shiftPermKeys) {
         const permId = permissionMap.get(key);

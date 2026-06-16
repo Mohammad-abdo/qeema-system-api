@@ -33,6 +33,7 @@ const rbacRouter = require("./routes/rbac");
 const attachmentsRouter = require("./routes/attachments");
 const searchRouter = require("./routes/search");
 const reportsRouter = require("./routes/reports");
+const performanceRouter = require("./routes/performance");
 const dataPortabilityRouter = require("./routes/dataPortability");
 
 const app = express();
@@ -136,6 +137,7 @@ app.use("/api/v1", rbacRouter);
 app.use("/api/v1", attachmentsRouter);
 app.use("/api/v1", searchRouter);
 app.use("/api/v1/reports", reportsRouter);
+app.use("/api/v1/performance", performanceRouter);
 app.use("/api/v1", dataPortabilityRouter);
 
 if (process.env.SENTRY_DSN && Sentry) {

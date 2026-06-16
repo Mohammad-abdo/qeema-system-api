@@ -26,6 +26,14 @@ const REPORT_PERMISSIONS = [
   },
 ];
 
+/**
+ * Role mapping for staff performance RBAC (enforced in performanceReviewAuth.js):
+ * - admin: all permissions (via admin role in seed)
+ * - team_lead: report.view + report.export (team-scoped in API)
+ * - developer: no report.* permissions (self-view via role exception in API)
+ */
+const TEAM_LEAD_REPORT_KEYS = ["report.view", "report.export"];
+
 async function main() {
   console.log("Ensuring report permissions...");
 
@@ -45,8 +53,25 @@ async function main() {
   const current = await prisma.permission.findMany({
     where: { module: "report" },
     orderBy: { key: "asc" },
-    select: { key: true, name: true },
+    select: { id: true, key: true, name: true },
   });
+
+  const permByKey = new Map(current.map((p) => [p.key, p.id]));
+  const teamLeadRole = await prisma.role.findFirst({ where: { name: "team_lead" } });
+  if (teamLeadRole) {
+    for (const key of TEAM_LEAD_REPORT_KEYS) {
+      const permId = permByKey.get(key);
+      if (!permId) continue;
+      await prisma.rolePermission.upsert({
+        where: {
+          roleId_permissionId: { roleId: teamLeadRole.id, permissionId: permId },
+        },
+        update: {},
+        create: { roleId: teamLeadRole.id, permissionId: permId },
+      });
+    }
+    console.log("Ensured team_lead role has report.view + report.export");
+  }
 
   console.log(`Done. Report permissions in DB: ${current.length}`);
   for (const perm of current) {

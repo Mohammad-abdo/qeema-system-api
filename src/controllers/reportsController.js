@@ -953,9 +953,57 @@ async function todaysFocusAnalyticalReport(req, res) {
   }
 }
 
+async function staffPerformanceReport(req, res) {
+  try {
+    const userId = Number(req.user?.id);
+    if (!userId) return sendError(res, 401, "Unauthorized", { code: CODES.UNAUTHORIZED });
+
+    const { applyViewScope } = require("../services/performance/performanceReviewAuth");
+
+    const teamIdParam = req.query.teamId;
+    const userIdsParam = req.query.userIds;
+    const userIdParam = req.query.userId;
+
+    const filters = {
+      startDate: req.query.startDate,
+      endDate: req.query.endDate,
+      teamId: teamIdParam != null && teamIdParam !== "" ? parseInt(teamIdParam, 10) : null,
+      userId: userIdParam != null && userIdParam !== "" ? parseInt(userIdParam, 10) : null,
+      userIds: userIdsParam
+        ? userIdsParam.split(",").map((id) => parseInt(id, 10)).filter((n) => !Number.isNaN(n))
+        : null,
+    };
+
+    const scoped = await applyViewScope(userId, filters);
+    if (scoped.allowedUserIds?.length) {
+      if (scoped.userId != null) {
+        scoped.userIds = [scoped.userId];
+      } else if (scoped.userIds?.length) {
+        const allowed = new Set(scoped.allowedUserIds);
+        scoped.userIds = scoped.userIds.filter((id) => allowed.has(id));
+      } else {
+        scoped.userIds = scoped.allowedUserIds;
+      }
+    }
+
+    const { buildStaffPerformanceReport } = require("../services/reports/staffPerformanceReportService");
+    const report = await buildStaffPerformanceReport(scoped);
+    return res.status(200).json(report);
+  } catch (err) {
+    console.error("[reportsController] staffPerformanceReport:", err);
+    const isValidation = err.message?.includes("Invalid date") || err.message?.includes("Period cannot");
+    const status = err.statusCode || (isValidation ? 400 : 500);
+    return sendError(res, status, err.message || "Failed to build staff performance report", {
+      code: status === 403 ? CODES.FORBIDDEN : isValidation ? CODES.BAD_REQUEST : CODES.INTERNAL_ERROR,
+      requestId: req.id,
+    });
+  }
+}
+
 module.exports = {
   projectsReport,
   todaysFocusReport,
   progressReport,
   todaysFocusAnalyticalReport,
+  staffPerformanceReport,
 };

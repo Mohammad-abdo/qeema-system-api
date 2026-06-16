@@ -365,6 +365,17 @@ async function main() {
             });
         }
         console.log('✅ Mapped ' + todayTaskPerms.length + ' today_task permissions to team_lead role');
+
+        // Staff performance: team leads view/export team-scoped reports (manage via role in code)
+        const teamLeadReportPerms = permissions.filter((p) =>
+            ['report.view', 'report.export'].includes(p.key)
+        );
+        for (const perm of teamLeadReportPerms) {
+            await prisma.rolePermission.create({
+                data: { roleId: teamLeadRole.id, permissionId: perm.id },
+            });
+        }
+        console.log('✅ Mapped report.view + report.export to team_lead role');
     }
 
     // 7c) Map daily shift sheet permission to project_manager role

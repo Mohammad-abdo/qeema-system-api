@@ -48,6 +48,10 @@ model User {
   roles                          UserRole[]                      @relation("UserRoles")
   assignedRoles                  UserRole[]                      @relation("RoleAssigner")
   urgentAcknowledgements         UrgentProjectAcknowledgement[]  @relation("UrgentAcknowledgements")
+  performancePeriodsCreated      PerformancePeriod[]
+  dailyUpdates                   DailyUpdate[]
+  performanceReviews             PerformanceReview[]
+  performanceFeedbackCreated     PerformanceFeedback[]
 
   @@index([role]) // For filtering users by role in RBAC checks
   @@index([isActive]) // For finding active users
@@ -108,6 +112,7 @@ model Project {
   activityLogs            ActivityLog[]
   projectTeams            ProjectTeam[] // Many-to-many teams
   urgentAcknowledgments   UrgentProjectAcknowledgement[]
+  dailyUpdates            DailyUpdate[]
 
   @@index([createdAt])  // For sorting by creation date
   @@index([projectStatusId]) // For filtering by dynamic status
@@ -147,6 +152,7 @@ model Task {
   taskStatus     TaskStatus?      @relation(fields: [taskStatusId], references: [id])
   timeLogs       TimeLog[]
   assignees      User[]           @relation("TaskAssignees")
+  dailyUpdates   DailyUpdate[]
   startedAt      DateTime?        @map("started_at")
   completedAt    DateTime?        @map("completed_at")
   rolloverCount  Int              @default(0) @map("rollover_count")
@@ -781,6 +787,93 @@ model ProductivitySnapshot {
 
   @@index([entityType, entityId, period])
   @@map("productivity_snapshots")
+}
+
+model PerformancePeriod {
+  id          Int                 @id @default(autoincrement())
+  title       String
+  startDate   DateTime            @map("start_date") @db.Date
+  endDate     DateTime            @map("end_date") @db.Date
+  status      String              @default("draft") // draft, active, closed
+  createdById Int                 @map("created_by")
+  createdAt   DateTime            @default(now()) @map("created_at")
+  updatedAt   DateTime            @updatedAt @map("updated_at")
+  createdBy   User                @relation(fields: [createdById], references: [id])
+  reviews     PerformanceReview[]
+
+  @@index([status])
+  @@index([startDate, endDate])
+  @@map("performance_periods")
+}
+
+model DailyUpdate {
+  id          Int       @id @default(autoincrement())
+  userId      Int       @map("user_id")
+  projectId   Int       @map("project_id")
+  taskId      Int?      @map("task_id")
+  updateText  String    @map("update_text") @db.Text
+  status      String    // done, in_progress, blocked
+  blockers    String?   @db.Text
+  evidenceUrl String?   @map("evidence_url")
+  updateDate  String    @map("update_date") // YYYY-MM-DD Cairo day
+  submittedAt DateTime? @map("submitted_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task        Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  @@index([userId, updateDate])
+  @@index([projectId, updateDate])
+  @@index([taskId])
+  @@map("daily_updates")
+}
+
+model PerformanceReview {
+  id                  Int                  @id @default(autoincrement())
+  periodId            Int                  @map("period_id")
+  userId              Int                  @map("user_id")
+  roleSnapshot        String               @map("role_snapshot")
+  updatesCount        Int                  @default(0) @map("updates_count")
+  projectsCount       Int                  @default(0) @map("projects_count")
+  activeDays          Int                  @default(0) @map("active_days")
+  expectedWorkingDays Int                  @default(0) @map("expected_working_days")
+  regularityScore     Float                @default(0) @map("regularity_score")
+  qualityScore        Float                @default(0) @map("quality_score")
+  speedScore          Float                @default(0) @map("speed_score")
+  communicationScore  Float                @default(0) @map("communication_score")
+  updateQualityScore  Float                @default(0) @map("update_quality_score")
+  complexityScore     Float                @default(0) @map("complexity_score")
+  finalScore          Float                @default(0) @map("final_score")
+  rating              String
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @updatedAt @map("updated_at")
+  period              PerformancePeriod    @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  feedback            PerformanceFeedback?
+
+  @@unique([periodId, userId])
+  @@index([userId])
+  @@index([periodId])
+  @@index([finalScore])
+  @@map("performance_reviews")
+}
+
+model PerformanceFeedback {
+  id                Int               @id @default(autoincrement())
+  reviewId          Int               @unique @map("review_id")
+  strengths         String            @db.Text
+  improvementPoints String            @map("improvement_points") @db.Text
+  managerNotes      String?           @map("manager_notes") @db.Text
+  actionPlan        String?           @map("action_plan") @db.Text
+  createdById       Int               @map("created_by")
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
+  review            PerformanceReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  createdBy         User              @relation(fields: [createdById], references: [id])
+
+  @@index([createdById])
+  @@map("performance_feedback")
 }
 
 model ForecastSnapshot {

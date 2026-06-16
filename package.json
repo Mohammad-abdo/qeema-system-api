@@ -25,6 +25,7 @@
     "seed": "node prisma/seed.js",
     "script:check-permissions": "node scripts/check-permissions.js",
     "script:ensure-report-permissions": "node scripts/ensure-report-permissions.js",
+    "seed:staff-performance-demo": "node scripts/seed-staff-performance-demo.js",
     "script:audit-rbac-bypasses": "node scripts/audit-rbac-bypasses.js",
     "test:change-password": "node scripts/test-change-password.js",
     "script:validate-seed-safety": "node scripts/validate-seed-safety.js",
